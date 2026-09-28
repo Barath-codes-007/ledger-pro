@@ -42,7 +42,10 @@ function initDarkMode() {
 
       fetch("/settings/theme", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": (document.querySelector('meta[name="csrf-token"]') || {}).content || "",
+        },
         body: JSON.stringify({ dark_mode: !isDark }),
       }).catch(() => {});
     });

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}Ledger — Expense Tracker{% endblock %}</title>
@@ -59,7 +60,10 @@
           <div class="u-name">{{ current_user['name'] if current_user else 'Guest' }}</div>
           <div class="u-email">{{ current_user['email'] if current_user else '' }}</div>
         </div>
-        <a href="{{ url_for('logout') }}" class="logout-btn" title="Log out"><i class="fa-solid fa-arrow-right-from-bracket"></i></a>
+        <form method="POST" action="{{ url_for('logout') }}" style="display:inline;margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="logout-btn" title="Log out" aria-label="Log out" style="background:none;border:0;cursor:pointer;color:inherit;"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+        </form>
       </div>
     </div>
   </aside>
@@ -86,6 +90,9 @@
     <main class="page-body">
       {% block content %}{% endblock %}
     </main>
+    <footer class="app-footer" style="padding:18px 24px;font-size:12px;opacity:.6;text-align:center;">
+      Ledger &middot; Personal Finance Platform &middot; Developed by Barath
+    </footer>
   </div>
 </div>
 

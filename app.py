@@ -8,28 +8,53 @@ that power the dashboard charts and live search.
 import os
 import io
 import csv
+import logging
+import secrets
 import calendar
 from datetime import datetime, timedelta
 from functools import wraps
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    session, flash, jsonify, send_file, abort
+    session, flash, jsonify, send_file, abort, send_from_directory
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import pandas as pd
 
 from database import get_db_connection, init_db, now_iso
+import security
 
 # ---------------------------------------------------------------------------
 # App configuration
 # ---------------------------------------------------------------------------
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production-8f3a1c")
-app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+log = logging.getLogger("ledger")
+
+IS_PRODUCTION = bool(os.environ.get("RENDER")) or os.environ.get("LEDGER_ENV", "").lower() == "production"
+DEBUG = os.environ.get("LEDGER_DEBUG", "").lower() in ("1", "true") and not IS_PRODUCTION
+
+_secret = os.environ.get("SECRET_KEY")
+if not _secret:
+    # No hard-coded key. Without SECRET_KEY, sessions reset on every restart.
+    _secret = secrets.token_hex(32)
+    log.warning("SECRET_KEY is not set; using a temporary key. Set SECRET_KEY in your environment.")
+app.secret_key = _secret
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Receipts live outside /static so they are never served publicly.
+app.config["RECEIPT_DIR"] = os.environ.get("LEDGER_RECEIPT_DIR", os.path.join(BASE_DIR, "instance", "receipts"))
+app.config["LEGACY_UPLOAD_DIR"] = os.path.join(BASE_DIR, "static", "uploads")
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB max upload
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "pdf"}
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=IS_PRODUCTION,
+    PERMANENT_SESSION_LIFETIME=timedelta(days=14),
+)
+login_limiter = security.LoginRateLimiter()
+DEFAULT_CURRENCY = "INR"
 
 CATEGORY_ICONS = {
     "Food": "fa-utensils",
@@ -52,8 +77,29 @@ CURRENCIES = {"USD": "$", "EUR": "€", "GBP": "£", "INR": "₹", "JPY": "¥", 
 LANGUAGES = ["English", "Spanish", "French", "German", "Hindi"]
 
 
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+def client_ip():
+    fwd = request.headers.get("X-Forwarded-For", "")
+    return fwd.split(",")[0].strip() if fwd else (request.remote_addr or "unknown")
+
+
+@app.before_request
+def protect_request():
+    """CSRF check for state-changing requests; hide legacy public uploads."""
+    if request.path.startswith("/static/uploads/") and request.path != "/static/uploads/.gitkeep":
+        abort(404)
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        submitted = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
+        if not security.csrf_valid(session, submitted):
+            log.warning("csrf_rejected path=%s ip=%s", request.path, client_ip())
+            abort(400, description="Your session expired. Please go back, refresh and try again.")
+
+
+@app.after_request
+def security_headers(resp):
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -80,8 +126,8 @@ def get_current_user():
 
 def get_user_currency_symbol(user):
     if not user:
-        return "$"
-    return CURRENCIES.get(user["currency"], "$")
+        return CURRENCIES[DEFAULT_CURRENCY]
+    return CURRENCIES.get(user["currency"], CURRENCIES[DEFAULT_CURRENCY])
 
 
 @app.context_processor
@@ -91,6 +137,7 @@ def inject_globals():
     return dict(
         current_user=user,
         currency_symbol=get_user_currency_symbol(user),
+        csrf_token=lambda: security.get_csrf_token(session),
         category_icons=CATEGORY_ICONS,
         payment_modes=PAYMENT_MODES,
         currencies=CURRENCIES,
@@ -120,8 +167,9 @@ def signup():
         if not name or not email or not password:
             flash("All fields are required.", "error")
             return redirect(url_for("signup"))
-        if len(password) < 6:
-            flash("Password must be at least 6 characters.", "error")
+        pw_error = security.validate_password(password)
+        if pw_error:
+            flash(pw_error, "error")
             return redirect(url_for("signup"))
         if password != confirm:
             flash("Passwords do not match.", "error")
@@ -141,9 +189,10 @@ def signup():
         )
         user_id = cur.lastrowid
         conn.execute(
-            "INSERT INTO settings (user_id, currency, language, dark_mode) VALUES (?, 'USD', 'English', 0)",
-            (user_id,)
+            "INSERT INTO settings (user_id, currency, language, dark_mode) VALUES (?, ?, 'English', 0)",
+            (user_id, DEFAULT_CURRENCY)
         )
+        conn.execute("UPDATE users SET currency = ? WHERE id = ?", (DEFAULT_CURRENCY, user_id))
         conn.commit()
         conn.close()
 
@@ -158,24 +207,36 @@ def login():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
+        key = (client_ip(), email)
+
+        if login_limiter.is_blocked(key):
+            log.warning("login_rate_limited ip=%s", key[0])
+            flash("Too many failed attempts. Please try again in 15 minutes.", "error")
+            return render_template("login.html"), 429
 
         conn = get_db_connection()
         user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
         conn.close()
 
         if user and check_password_hash(user["password_hash"], password):
+            login_limiter.reset(key)
+            session.clear()  # rotate session on privilege change
+            session.permanent = True
             session["user_id"] = user["id"]
             session["user_name"] = user["name"]
+            log.info("login_success user_id=%s", user["id"])
             flash(f"Welcome back, {user['name']}!", "success")
             return redirect(url_for("dashboard"))
 
+        login_limiter.record_failure(key)
+        log.warning("login_failed ip=%s", key[0])
         flash("Invalid email or password.", "error")
         return redirect(url_for("login"))
 
     return render_template("login.html")
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     flash("You have been logged out.", "success")
@@ -194,6 +255,7 @@ def dashboard():
     today = datetime.now()
     month_start = today.replace(day=1).strftime("%Y-%m-%d")
     today_str = today.strftime("%Y-%m-%d")
+    next_month_start = (today.replace(day=28) + timedelta(days=4)).replace(day=1).strftime("%Y-%m-%d")
 
     total_income = conn.execute(
         "SELECT COALESCE(SUM(amount), 0) AS t FROM income WHERE user_id = ?", (uid,)
@@ -204,19 +266,19 @@ def dashboard():
     balance = total_income - total_expense
 
     month_expense = conn.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS t FROM expenses WHERE user_id = ? AND date >= ?",
-        (uid, month_start)
+        "SELECT COALESCE(SUM(amount), 0) AS t FROM expenses WHERE user_id = ? AND date >= ? AND date < ?",
+        (uid, month_start, next_month_start)
     ).fetchone()["t"]
     month_income = conn.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS t FROM income WHERE user_id = ? AND date >= ?",
-        (uid, month_start)
+        "SELECT COALESCE(SUM(amount), 0) AS t FROM income WHERE user_id = ? AND date >= ? AND date < ?",
+        (uid, month_start, next_month_start)
     ).fetchone()["t"]
 
     txns_today = conn.execute(
         "SELECT COUNT(*) AS c FROM expenses WHERE user_id = ? AND date = ?", (uid, today_str)
     ).fetchone()["c"]
     txns_month = conn.execute(
-        "SELECT COUNT(*) AS c FROM expenses WHERE user_id = ? AND date >= ?", (uid, month_start)
+        "SELECT COUNT(*) AS c FROM expenses WHERE user_id = ? AND date >= ? AND date < ?", (uid, month_start, next_month_start)
     ).fetchone()["c"]
 
     days_elapsed = today.day
@@ -338,20 +400,19 @@ def add_expense():
 
         try:
             amount = float(amount)
-            if amount <= 0:
+            if not (0 < amount < 1e12):
                 raise ValueError
-        except ValueError:
+        except (ValueError, TypeError):
             flash("Please enter a valid positive amount.", "error")
             return redirect(url_for("add_expense"))
 
         receipt_path = None
         file = request.files.get("receipt")
-        if file and file.filename and allowed_file(file.filename):
-            os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-            filename = secure_filename(f"{uid}_{int(datetime.now().timestamp())}_{file.filename}")
-            filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-            file.save(filepath)
-            receipt_path = f"uploads/{filename}"
+        if file and file.filename:
+            receipt_path, err = security.save_receipt(file, app.config["RECEIPT_DIR"])
+            if err:
+                flash(err, "error")
+                return redirect(url_for("add_expense"))
 
         icon = CATEGORY_ICONS.get(category, "fa-receipt")
 
@@ -393,8 +454,16 @@ def edit_expense(expense_id):
 
         try:
             amount = float(amount)
+            if not (0 < amount < 1e12):
+                raise ValueError
+            datetime.strptime(date or "", "%Y-%m-%d")
         except (ValueError, TypeError):
-            flash("Please enter a valid amount.", "error")
+            conn.close()
+            flash("Please enter a valid positive amount and date.", "error")
+            return redirect(url_for("edit_expense", expense_id=expense_id))
+        if not category:
+            conn.close()
+            flash("Category is required.", "error")
             return redirect(url_for("edit_expense", expense_id=expense_id))
 
         icon = CATEGORY_ICONS.get(category, "fa-receipt")
@@ -573,8 +642,9 @@ def budget():
     ).fetchone()
 
     month_start = today.replace(day=1).strftime("%Y-%m-%d")
+    next_month_start = (today.replace(day=28) + timedelta(days=4)).replace(day=1).strftime("%Y-%m-%d")
     spent = conn.execute(
-        "SELECT COALESCE(SUM(amount),0) AS t FROM expenses WHERE user_id=? AND date>=?", (uid, month_start)
+        "SELECT COALESCE(SUM(amount),0) AS t FROM expenses WHERE user_id=? AND date>=? AND date<?", (uid, month_start, next_month_start)
     ).fetchone()["t"]
 
     recurring = conn.execute(
@@ -764,8 +834,15 @@ def settings():
 def update_profile():
     uid = session["user_id"]
     name = request.form.get("name", "").strip()
-    currency = request.form.get("currency", "USD")
+    currency = request.form.get("currency", DEFAULT_CURRENCY)
     language = request.form.get("language", "English")
+    if currency not in CURRENCIES:
+        currency = DEFAULT_CURRENCY
+    if language not in LANGUAGES:
+        language = "English"
+    if not name:
+        flash("Name cannot be empty.", "error")
+        return redirect(url_for("settings"))
 
     conn = get_db_connection()
     conn.execute("UPDATE users SET name = ?, currency = ?, language = ? WHERE id = ?",
@@ -794,9 +871,10 @@ def change_password():
         conn.close()
         flash("Current password is incorrect.", "error")
         return redirect(url_for("settings"))
-    if len(new) < 6:
+    pw_error = security.validate_password(new)
+    if pw_error:
         conn.close()
-        flash("New password must be at least 6 characters.", "error")
+        flash(pw_error, "error")
         return redirect(url_for("settings"))
     if new != confirm:
         conn.close()
@@ -807,6 +885,7 @@ def change_password():
                  (generate_password_hash(new), uid))
     conn.commit()
     conn.close()
+    log.info("password_changed user_id=%s", uid)
     flash("Password changed successfully!", "success")
     return redirect(url_for("settings"))
 
@@ -829,9 +908,26 @@ def toggle_theme():
 def delete_account():
     uid = session["user_id"]
     conn = get_db_connection()
+    user = conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    if not user or not check_password_hash(user["password_hash"], request.form.get("password", "")):
+        conn.close()
+        flash("Password is incorrect. Account was not deleted.", "error")
+        return redirect(url_for("settings"))
+
+    receipts = [r["receipt_path"] for r in conn.execute(
+        "SELECT receipt_path FROM expenses WHERE user_id = ? AND receipt_path IS NOT NULL", (uid,)
+    ).fetchall()]
     conn.execute("DELETE FROM users WHERE id = ?", (uid,))
     conn.commit()
     conn.close()
+    for rp in receipts:
+        path = resolve_receipt_path(rp)
+        if path and os.path.isfile(path):
+            try:
+                os.remove(path)
+            except OSError:
+                log.warning("receipt_cleanup_failed user_id=%s", uid)
+    log.info("account_deleted user_id=%s", uid)
     session.clear()
     flash("Your account has been deleted.", "success")
     return redirect(url_for("index"))
@@ -975,8 +1071,71 @@ def api_insights():
 
 
 # ---------------------------------------------------------------------------
+# Receipts (authenticated, never public)
+# ---------------------------------------------------------------------------
+def resolve_receipt_path(stored):
+    """Map a stored receipt_path to a safe absolute path, or None."""
+    if not stored:
+        return None
+    name = os.path.basename(stored)
+    if stored.startswith("receipts/"):
+        base = app.config["RECEIPT_DIR"]
+    elif stored.startswith("uploads/"):  # files saved by the pre-upgrade version
+        base = app.config["LEGACY_UPLOAD_DIR"]
+    else:
+        return None
+    path = os.path.realpath(os.path.join(base, name))
+    return path if path.startswith(os.path.realpath(base) + os.sep) else None
+
+
+@app.route("/receipts/<int:expense_id>")
+@login_required
+def receipt(expense_id):
+    conn = get_db_connection()
+    row = conn.execute(
+        "SELECT receipt_path FROM expenses WHERE id = ? AND user_id = ?",
+        (expense_id, session["user_id"])
+    ).fetchone()
+    conn.close()
+    path = resolve_receipt_path(row["receipt_path"]) if row else None
+    if not path or not os.path.isfile(path):
+        abort(404)
+    ext = path.rsplit(".", 1)[-1].lower()
+    return send_from_directory(
+        os.path.dirname(path), os.path.basename(path),
+        mimetype=security.RECEIPT_MIME.get(ext, "application/octet-stream"),
+        as_attachment=request.args.get("download") == "1",
+    )
+
+
+@app.route("/health")
+def health():
+    try:
+        conn = get_db_connection()
+        conn.execute("SELECT 1").fetchone()
+        conn.close()
+    except Exception:
+        return jsonify({"status": "error"}), 503
+    return jsonify({"status": "ok"})
+
+
+# ---------------------------------------------------------------------------
 # Error handlers
 # ---------------------------------------------------------------------------
+def render_error(code, title, message):
+    return render_template("error.html", code=code, title=title, message=message), code
+
+
+@app.errorhandler(400)
+def bad_request(e):
+    return render_error(400, "Request could not be verified", getattr(e, "description", "Bad request."))
+
+
+@app.errorhandler(403)
+def forbidden(e):
+    return render_error(403, "Access denied", "You don't have permission to view this page.")
+
+
 @app.errorhandler(404)
 def not_found(e):
     return render_template("404.html"), 404
@@ -988,12 +1147,23 @@ def too_large(e):
     return redirect(request.referrer or url_for("dashboard"))
 
 
+@app.errorhandler(429)
+def too_many(e):
+    return render_error(429, "Too many requests", "Please slow down and try again shortly.")
+
+
+@app.errorhandler(500)
+def server_error(e):
+    log.exception("unhandled_error")
+    return render_error(500, "Something went wrong", "An unexpected error occurred. It has been logged.")
+
+
 # ---------------------------------------------------------------------------
 # Entrypoint
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=DEBUG)
 else:
     init_db()

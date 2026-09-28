@@ -7,12 +7,15 @@ import sqlite3
 import os
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "expense_tracker.db")
+DB_PATH = os.environ.get(
+    "LEDGER_DB_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "expense_tracker.db"),
+)
 
 
 def get_db_connection():
     """Return a SQLite connection with row factory set to dict-like rows."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(os.environ.get("LEDGER_DB_PATH", DB_PATH))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -30,7 +33,7 @@ def init_db():
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             avatar TEXT DEFAULT NULL,
-            currency TEXT DEFAULT 'USD',
+            currency TEXT DEFAULT 'INR',
             language TEXT DEFAULT 'English',
             dark_mode INTEGER DEFAULT 0,
             created_at TEXT NOT NULL
@@ -84,7 +87,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS settings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER UNIQUE NOT NULL,
-            currency TEXT DEFAULT 'USD',
+            currency TEXT DEFAULT 'INR',
             language TEXT DEFAULT 'English',
             dark_mode INTEGER DEFAULT 0,
             notifications INTEGER DEFAULT 1,

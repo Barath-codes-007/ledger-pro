@@ -24,6 +24,7 @@
       </p>
 
       <form method="POST" action="{{ url_for('budget') }}" style="margin-top:22px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field-row">
           <div class="field">
             <label for="amount">Monthly budget</label>
@@ -50,6 +51,7 @@
           <div style="display:flex; align-items:center; gap:14px;">
             <span class="mono" style="font-weight:600;">{{ currency_symbol }}{{ '%.2f'|format(r['amount']) }}</span>
             <form method="POST" action="{{ url_for('delete_recurring', rec_id=r['id']) }}" data-confirm="Remove this recurring expense?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="row-actions" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--border);color:var(--text-muted);background:var(--surface);"><i class="fa-solid fa-trash"></i></button>
             </form>
           </div>
@@ -64,6 +66,7 @@
       {% endif %}
 
       <form method="POST" action="{{ url_for('add_recurring') }}" style="margin-top:16px; border-top:1px dashed var(--border); padding-top:18px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field-row">
           <div class="field">
             <label for="rcategory">Category</label>

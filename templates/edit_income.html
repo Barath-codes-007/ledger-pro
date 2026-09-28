@@ -6,6 +6,7 @@
 {% block content %}
 <div class="panel form-card">
   <form method="POST" action="{{ url_for('edit_income', income_id=income['id']) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="field">
       <label for="source">Source</label>
       <input type="text" id="source" name="source" value="{{ income['source'] }}" required>

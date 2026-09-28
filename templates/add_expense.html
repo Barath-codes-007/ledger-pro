@@ -6,6 +6,7 @@
 {% block content %}
 <div class="panel form-card">
   <form method="POST" action="{{ url_for('add_expense') }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="field">
       <label>Category</label>
       <div class="category-picker">

@@ -6,6 +6,7 @@
 {% block content %}
 <div class="panel form-card">
   <form method="POST" action="{{ url_for('add_income') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="field">
       <label for="source">Source</label>
       <input type="text" id="source" name="source" placeholder="e.g. Salary, Freelance, Dividends" required>

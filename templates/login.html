@@ -39,6 +39,7 @@
       <h1>Welcome back</h1>
       <p class="sub">Log in to continue tracking your finances.</p>
       <form method="POST" action="{{ url_for('login') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field">
           <label for="email">Email address</label>
           <input type="email" id="email" name="email" placeholder="you@example.com" required autofocus>

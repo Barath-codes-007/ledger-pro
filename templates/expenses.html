@@ -49,7 +49,7 @@
         <td>{{ e['payment_mode'] }}</td>
         <td>
           {% if e['receipt_path'] %}
-            <a href="{{ url_for('static', filename=e['receipt_path']) }}" target="_blank" class="chip chip-gray"><i class="fa-solid fa-paperclip"></i> View</a>
+            <a href="{{ url_for('receipt', expense_id=e['id']) }}" target="_blank" class="chip chip-gray"><i class="fa-solid fa-paperclip"></i> View</a>
           {% else %}—{% endif %}
         </td>
         <td class="mono" style="color:var(--ledger-red); font-weight:600;">-{{ currency_symbol }}{{ '%.2f'|format(e['amount']) }}</td>
@@ -57,6 +57,7 @@
           <div class="row-actions">
             <a href="{{ url_for('edit_expense', expense_id=e['id']) }}" title="Edit"><i class="fa-solid fa-pen"></i></a>
             <form method="POST" action="{{ url_for('delete_expense', expense_id=e['id']) }}" data-confirm="Delete this expense?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" title="Delete"><i class="fa-solid fa-trash"></i></button>
             </form>
           </div>

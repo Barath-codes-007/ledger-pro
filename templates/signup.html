@@ -39,6 +39,7 @@
       <h1>Create your account</h1>
       <p class="sub">Start tracking in under two minutes.</p>
       <form method="POST" action="{{ url_for('signup') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field">
           <label for="name">Full name</label>
           <input type="text" id="name" name="name" placeholder="Alex Morgan" required autofocus>
