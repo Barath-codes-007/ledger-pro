@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Ledger — Expense Tracker{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<script>
+  if (localStorage.getItem('theme') === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+</script>
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<div class="page-loader"><div class="spinner"></div></div>
+
+<div class="toast-stack">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="toast {{ 'success' if category == 'success' else 'error' }}">
+          <i class="fa-solid {{ 'fa-circle-check' if category == 'success' else 'fa-circle-exclamation' }}"></i>
+          <span class="msg">{{ message }}</span>
+          <button class="close-toast" aria-label="Dismiss"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+</div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="mark">L</div>
+      <span class="name">Ledger</span>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Overview</div>
+      <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint == 'dashboard' }}"><i class="fa-solid fa-grip"></i> Dashboard</a>
+      <a href="{{ url_for('reports') }}" class="{{ 'active' if request.endpoint == 'reports' }}"><i class="fa-solid fa-chart-pie"></i> Analytics &amp; Reports</a>
+
+      <div class="nav-label">Money</div>
+      <a href="{{ url_for('expenses') }}" class="{{ 'active' if request.endpoint in ['expenses','add_expense','edit_expense'] }}"><i class="fa-solid fa-arrow-trend-down"></i> Expenses</a>
+      <a href="{{ url_for('income') }}" class="{{ 'active' if request.endpoint in ['income','add_income','edit_income'] }}"><i class="fa-solid fa-arrow-trend-up"></i> Income</a>
+      <a href="{{ url_for('budget') }}" class="{{ 'active' if request.endpoint == 'budget' }}"><i class="fa-solid fa-piggy-bank"></i> Budget &amp; Goals</a>
+
+      <div class="nav-label">Account</div>
+      <a href="{{ url_for('profile') }}" class="{{ 'active' if request.endpoint == 'profile' }}"><i class="fa-solid fa-user"></i> Profile</a>
+      <a href="{{ url_for('settings') }}" class="{{ 'active' if request.endpoint == 'settings' }}"><i class="fa-solid fa-gear"></i> Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <div class="avatar">{{ current_user['name'][:1].upper() if current_user else 'U' }}</div>
+        <div class="meta">
+          <div class="u-name">{{ current_user['name'] if current_user else 'Guest' }}</div>
+          <div class="u-email">{{ current_user['email'] if current_user else '' }}</div>
+        </div>
+        <a href="{{ url_for('logout') }}" class="logout-btn" title="Log out"><i class="fa-solid fa-arrow-right-from-bracket"></i></a>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:14px;">
+        <button class="menu-toggle" aria-label="Toggle menu"><i class="fa-solid fa-bars"></i></button>
+        <div>
+          <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+          <div class="subtitle">{% block page_subtitle %}Welcome back{% endblock %}</div>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <div class="search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="globalSearch" placeholder="Search transactions...">
+          <div class="search-results" id="searchResults"></div>
+        </div>
+        <button class="theme-toggle" aria-label="Toggle dark mode"><i class="fa-solid fa-moon"></i></button>
+      </div>
+    </header>
+
+    <main class="page-body">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<a href="{{ url_for('add_expense') }}" class="fab" title="Add expense"><i class="fa-solid fa-plus"></i></a>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log in — Ledger</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+</head>
+<body>
+<div class="toast-stack">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="toast {{ 'success' if category == 'success' else 'error' }}">
+        <i class="fa-solid {{ 'fa-circle-check' if category == 'success' else 'fa-circle-exclamation' }}"></i>
+        <span class="msg">{{ message }}</span>
+        <button class="close-toast"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+</div>
+
+<div class="auth-wrap">
+  <div class="auth-side">
+    <div class="brand"><div class="mark">L</div><span style="font-family:var(--font-display);font-size:19px;">Ledger</span></div>
+    <div class="quote">
+      <h2>"The ledger doesn't lie. Neither should your budget."</h2>
+      <p>Sign back in to pick up right where you left off — your dashboard, charts and budgets are exactly as you left them.</p>
+    </div>
+    <div class="stat-strip">
+      <div><span>30+</span><small>Features</small></div>
+      <div><span>12</span><small>Chart views</small></div>
+      <div><span>24/7</span><small>Access</small></div>
+    </div>
+  </div>
+
+  <div class="auth-form-wrap">
+    <div class="auth-card">
+      <h1>Welcome back</h1>
+      <p class="sub">Log in to continue tracking your finances.</p>
+      <form method="POST" action="{{ url_for('login') }}">
+        <div class="field">
+          <label for="email">Email address</label>
+          <input type="email" id="email" name="email" placeholder="you@example.com" required autofocus>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="input-wrap">
+            <input type="password" id="password" name="password" placeholder="••••••••" required>
+            <i class="fa-solid fa-eye" onclick="togglePw(this,'password')"></i>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-accent btn-block">Log in</button>
+      </form>
+      <p class="auth-foot">Don't have an account? <a href="{{ url_for('signup') }}">Sign up free</a></p>
+    </div>
+  </div>
+</div>
+
+<script>
+function togglePw(icon, id) {
+  const input = document.getElementById(id);
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  icon.className = show ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+}
+document.querySelectorAll('.close-toast').forEach(b => b.addEventListener('click', () => b.closest('.toast').remove()));
+</script>
+</body>
+</html>

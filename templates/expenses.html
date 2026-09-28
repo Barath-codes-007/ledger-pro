@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Expenses — Ledger{% endblock %}
+{% block page_title %}Expenses{% endblock %}
+{% block page_subtitle %}{{ expenses|length }} transaction(s) found{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+  <form class="toolbar-filters" method="GET" action="{{ url_for('expenses') }}">
+    <input type="text" name="search" placeholder="Search description or category..." value="{{ search }}" style="min-width:220px;">
+    <select name="category">
+      <option value="">All categories</option>
+      {% for c in categories %}
+        <option value="{{ c['category'] }}" {{ 'selected' if selected_category == c['category'] }}>{{ c['category'] }}</option>
+      {% endfor %}
+    </select>
+    <input type="date" name="date_from" value="{{ date_from }}">
+    <input type="date" name="date_to" value="{{ date_to }}">
+    <select name="sort">
+      <option value="newest" {{ 'selected' if sort == 'newest' }}>Newest first</option>
+      <option value="oldest" {{ 'selected' if sort == 'oldest' }}>Oldest first</option>
+      <option value="amount_high" {{ 'selected' if sort == 'amount_high' }}>Amount: high to low</option>
+      <option value="amount_low" {{ 'selected' if sort == 'amount_low' }}>Amount: low to high</option>
+    </select>
+    <button type="submit" class="btn btn-outline btn-sm"><i class="fa-solid fa-filter"></i> Filter</button>
+  </form>
+  <a href="{{ url_for('add_expense') }}" class="btn btn-accent"><i class="fa-solid fa-plus"></i> Add Expense</a>
+</div>
+
+<div class="table-wrap">
+  {% if expenses %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Description</th>
+        <th>Date</th>
+        <th>Payment</th>
+        <th>Receipt</th>
+        <th>Amount</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in expenses %}
+      <tr>
+        <td><span class="chip chip-red"><i class="fa-solid {{ e['icon'] }}"></i> {{ e['category'] }}</span></td>
+        <td>{{ e['description'] or '—' }}</td>
+        <td class="mono">{{ e['date'] }}</td>
+        <td>{{ e['payment_mode'] }}</td>
+        <td>
+          {% if e['receipt_path'] %}
+            <a href="{{ url_for('static', filename=e['receipt_path']) }}" target="_blank" class="chip chip-gray"><i class="fa-solid fa-paperclip"></i> View</a>
+          {% else %}—{% endif %}
+        </td>
+        <td class="mono" style="color:var(--ledger-red); font-weight:600;">-{{ currency_symbol }}{{ '%.2f'|format(e['amount']) }}</td>
+        <td>
+          <div class="row-actions">
+            <a href="{{ url_for('edit_expense', expense_id=e['id']) }}" title="Edit"><i class="fa-solid fa-pen"></i></a>
+            <form method="POST" action="{{ url_for('delete_expense', expense_id=e['id']) }}" data-confirm="Delete this expense?">
+              <button type="submit" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <i class="fa-solid fa-receipt"></i>
+    <h3>No expenses found</h3>
+    <p>Try adjusting your filters, or add a new expense.</p>
+    <a href="{{ url_for('add_expense') }}" class="btn btn-accent btn-sm">Add Expense</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

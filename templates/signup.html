@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign up — Ledger</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+</head>
+<body>
+<div class="toast-stack">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="toast {{ 'success' if category == 'success' else 'error' }}">
+        <i class="fa-solid {{ 'fa-circle-check' if category == 'success' else 'fa-circle-exclamation' }}"></i>
+        <span class="msg">{{ message }}</span>
+        <button class="close-toast"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+</div>
+
+<div class="auth-wrap">
+  <div class="auth-side">
+    <div class="brand"><div class="mark">L</div><span style="font-family:var(--font-display);font-size:19px;">Ledger</span></div>
+    <div class="quote">
+      <h2>Open an account book for your everyday money.</h2>
+      <p>Free to use. Your data stays in your own database — no bank linking, no middlemen.</p>
+    </div>
+    <div class="stat-strip">
+      <div><span>2 min</span><small>To set up</small></div>
+      <div><span>$0</span><small>Cost</small></div>
+      <div><span>∞</span><small>Transactions</small></div>
+    </div>
+  </div>
+
+  <div class="auth-form-wrap">
+    <div class="auth-card">
+      <h1>Create your account</h1>
+      <p class="sub">Start tracking in under two minutes.</p>
+      <form method="POST" action="{{ url_for('signup') }}">
+        <div class="field">
+          <label for="name">Full name</label>
+          <input type="text" id="name" name="name" placeholder="Alex Morgan" required autofocus>
+        </div>
+        <div class="field">
+          <label for="email">Email address</label>
+          <input type="email" id="email" name="email" placeholder="you@example.com" required>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="password">Password</label>
+            <div class="input-wrap">
+              <input type="password" id="password" name="password" placeholder="At least 6 characters" required minlength="6">
+              <i class="fa-solid fa-eye" onclick="togglePw(this,'password')"></i>
+            </div>
+          </div>
+          <div class="field">
+            <label for="confirm_password">Confirm password</label>
+            <div class="input-wrap">
+              <input type="password" id="confirm_password" name="confirm_password" placeholder="Repeat password" required minlength="6">
+              <i class="fa-solid fa-eye" onclick="togglePw(this,'confirm_password')"></i>
+            </div>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-accent btn-block">Create account</button>
+      </form>
+      <p class="auth-foot">Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
+    </div>
+  </div>
+</div>
+
+<script>
+function togglePw(icon, id) {
+  const input = document.getElementById(id);
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  icon.className = show ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+}
+document.querySelectorAll('.close-toast').forEach(b => b.addEventListener('click', () => b.closest('.toast').remove()));
+</script>
+</body>
+</html>

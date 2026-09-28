@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Ledger{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Here's where your money stands today{% endblock %}
+
+{% block content %}
+<div class="grid grid-4">
+  <div class="stat-card tone-green">
+    <div class="stat-top">
+      <div><div class="stat-label">Total Income</div></div>
+      <div class="stat-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
+    </div>
+    <div class="stat-value mono">{{ currency_symbol }}<span data-countup="{{ total_income }}">0.00</span></div>
+    <div class="stat-delta" style="color:var(--ledger-green)"><i class="fa-solid fa-circle-check"></i> All-time earnings</div>
+  </div>
+
+  <div class="stat-card tone-red">
+    <div class="stat-top">
+      <div><div class="stat-label">Total Expense</div></div>
+      <div class="stat-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
+    </div>
+    <div class="stat-value mono">{{ currency_symbol }}<span data-countup="{{ total_expense }}">0.00</span></div>
+    <div class="stat-delta" style="color:var(--text-muted)">{{ txns_month }} transactions this month</div>
+  </div>
+
+  <div class="stat-card tone-ink">
+    <div class="stat-top">
+      <div><div class="stat-label">Current Balance</div></div>
+      <div class="stat-icon"><i class="fa-solid fa-wallet"></i></div>
+    </div>
+    <div class="stat-value mono">{{ currency_symbol }}<span data-countup="{{ balance }}">0.00</span></div>
+    <div class="stat-delta" style="color:var(--text-muted)">Income minus expense</div>
+  </div>
+
+  <div class="stat-card tone-gold">
+    <div class="stat-top">
+      <div><div class="stat-label">Monthly Budget</div></div>
+      <div class="stat-icon"><i class="fa-solid fa-piggy-bank"></i></div>
+    </div>
+    <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(monthly_budget) }}</div>
+    <div class="stat-delta" style="color:var(--text-muted)">{{ currency_symbol }}{{ '%.2f'|format(remaining_budget) }} remaining</div>
+  </div>
+</div>
+
+<div class="grid grid-4" style="margin-top:20px;">
+  <div class="stat-card">
+    <div class="stat-top"><div class="stat-label">Savings</div><div class="stat-icon" style="background:var(--ledger-green-light);color:var(--ledger-green);"><i class="fa-solid fa-seedling"></i></div></div>
+    <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(savings) }}</div>
+    <div class="stat-delta" style="color:var(--text-muted)">Goal: {{ currency_symbol }}{{ '%.2f'|format(savings_goal) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-top"><div class="stat-label">Transactions Today</div><div class="stat-icon" style="background:var(--ledger-gold-light);color:var(--ledger-gold);"><i class="fa-solid fa-calendar-day"></i></div></div>
+    <div class="stat-value mono">{{ txns_today }}</div>
+    <div class="stat-delta" style="color:var(--text-muted)">Logged today</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-top"><div class="stat-label">Transactions This Month</div><div class="stat-icon" style="background:var(--ledger-red-light);color:var(--ledger-red);"><i class="fa-solid fa-list"></i></div></div>
+    <div class="stat-value mono">{{ txns_month }}</div>
+    <div class="stat-delta" style="color:var(--text-muted)">Entries recorded</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-top"><div class="stat-label">Average Daily Expense</div><div class="stat-icon" style="background:var(--line-soft);color:var(--ink);"><i class="fa-solid fa-chart-line"></i></div></div>
+    <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(avg_daily) }}</div>
+    <div class="stat-delta" style="color:var(--text-muted)">This month so far</div>
+  </div>
+</div>
+
+<div class="dashboard-grid">
+  <div>
+    <div class="panel" data-chart="1">
+      <div class="panel-head">
+        <h3>Spending trend — last 30 days</h3>
+      </div>
+      <div class="chart-box"><canvas id="trendAreaChart"></canvas></div>
+    </div>
+
+    <div class="panel" style="margin-top:20px;">
+      <div class="panel-head">
+        <h3>Income vs. Expense — {{ now_year }}</h3>
+      </div>
+      <div class="chart-box"><canvas id="incomeExpenseChart"></canvas></div>
+    </div>
+
+    <div class="quick-actions">
+      <a href="{{ url_for('add_expense') }}" class="qa-btn"><i class="fa-solid fa-circle-minus"></i><span>Add Expense</span></a>
+      <a href="{{ url_for('add_income') }}" class="qa-btn"><i class="fa-solid fa-circle-plus"></i><span>Add Income</span></a>
+      <a href="{{ url_for('budget') }}" class="qa-btn"><i class="fa-solid fa-bullseye"></i><span>Set Budget</span></a>
+      <a href="{{ url_for('reports') }}" class="qa-btn"><i class="fa-solid fa-file-export"></i><span>Export Report</span></a>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Budget usage</h3>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12.5px; color:var(--text-muted); margin-bottom:8px;">
+        <span>{{ currency_symbol }}{{ '%.2f'|format(month_expense) }} spent</span>
+        <span>{{ budget_pct }}%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill {{ 'danger' if budget_pct >= 90 else ('warn' if budget_pct >= 70 else '') }}" style="width:{{ budget_pct }}%;"></div>
+      </div>
+      {% if monthly_budget and budget_pct >= 90 %}
+        <p style="font-size:12px;color:var(--ledger-red);margin-top:10px;"><i class="fa-solid fa-triangle-exclamation"></i> You're close to your monthly budget limit.</p>
+      {% elif not monthly_budget %}
+        <p style="font-size:12px;color:var(--text-muted);margin-top:10px;">No budget set yet. <a href="{{ url_for('budget') }}" style="color:var(--ledger-green);font-weight:600;">Set one now</a></p>
+      {% endif %}
+    </div>
+
+    <div class="panel" style="margin-top:20px;">
+      <div class="panel-head"><h3>Category split</h3></div>
+      <div class="chart-box sm"><canvas id="categoryPieChart"></canvas></div>
+    </div>
+
+    <div class="panel" style="margin-top:20px;">
+      <div class="panel-head">
+        <h3>Recent transactions</h3>
+        <a href="{{ url_for('expenses') }}" class="link">View all</a>
+      </div>
+      {% if recent %}
+        {% for e in recent %}
+        <div class="txn-row">
+          <div class="txn-icon"><i class="fa-solid {{ e['icon'] }}"></i></div>
+          <div class="txn-info">
+            <div class="t-title">{{ e['category'] }}</div>
+            <div class="t-meta">{{ e['date'] }} · {{ e['payment_mode'] }}</div>
+          </div>
+          <div class="txn-amount" style="color:var(--ledger-red);">-{{ currency_symbol }}{{ '%.2f'|format(e['amount']) }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">
+          <i class="fa-solid fa-receipt"></i>
+          <h3>No transactions yet</h3>
+          <p>Add your first expense to see it here.</p>
+          <a href="{{ url_for('add_expense') }}" class="btn btn-accent btn-sm">Add Expense</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

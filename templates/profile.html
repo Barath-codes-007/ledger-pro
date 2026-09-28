@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Profile — Ledger{% endblock %}
+{% block page_title %}Profile{% endblock %}
+{% block page_subtitle %}Your account at a glance{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width:640px;">
+  <div style="display:flex; align-items:center; gap:18px; margin-bottom:24px;">
+    <div class="avatar-lg">{{ current_user['name'][:1].upper() }}</div>
+    <div>
+      <h2 style="font-size:20px;">{{ current_user['name'] }}</h2>
+      <p style="color:var(--text-muted); font-size:13.5px;">{{ current_user['email'] }}</p>
+    </div>
+  </div>
+
+  <div class="settings-row">
+    <div><div class="sr-title">Member since</div></div>
+    <div class="mono" style="font-size:13px;">{{ current_user['created_at'][:10] }}</div>
+  </div>
+  <div class="settings-row">
+    <div><div class="sr-title">Preferred currency</div></div>
+    <div class="chip chip-green">{{ current_user['currency'] }}</div>
+  </div>
+  <div class="settings-row">
+    <div><div class="sr-title">Language</div></div>
+    <div class="chip chip-gray">{{ current_user['language'] }}</div>
+  </div>
+
+  <a href="{{ url_for('settings') }}" class="btn btn-outline" style="margin-top:20px;"><i class="fa-solid fa-gear"></i> Edit in Settings</a>
+</div>
+{% endblock %}

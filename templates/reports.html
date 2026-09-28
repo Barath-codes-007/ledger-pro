@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Reports — Ledger{% endblock %}
+{% block page_title %}Analytics &amp; Reports{% endblock %}
+{% block page_subtitle %}Deep dive into your spending patterns{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="panel-head">
+    <h3>Export report</h3>
+  </div>
+  <form class="toolbar-filters" method="GET" style="margin-bottom:14px;" id="exportFilterForm">
+    <input type="date" name="date_from" id="filterFrom">
+    <input type="date" name="date_to" id="filterTo">
+  </form>
+  <div class="report-export-row">
+    <a href="#" class="btn btn-outline btn-sm export-link" data-base="{{ url_for('export_csv') }}"><i class="fa-solid fa-file-csv"></i> Export CSV</a>
+    <a href="#" class="btn btn-outline btn-sm export-link" data-base="{{ url_for('export_excel') }}"><i class="fa-solid fa-file-excel"></i> Export Excel</a>
+    <a href="#" class="btn btn-outline btn-sm export-link" data-base="{{ url_for('export_pdf') }}"><i class="fa-solid fa-file-pdf"></i> Export PDF</a>
+    <button onclick="window.print()" class="btn btn-outline btn-sm" type="button"><i class="fa-solid fa-print"></i> Print Report</button>
+  </div>
+</div>
+
+<div class="grid grid-2" style="margin-top:20px;" data-chart="1">
+  <div class="panel">
+    <div class="panel-head"><h3>Category breakdown</h3></div>
+    <div class="chart-box"><canvas id="categoryPieChart"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><h3>Weekly spending heatmap</h3></div>
+    <div class="chart-box"><canvas id="weeklyHeatChart"></canvas></div>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <div class="panel-head"><h3>Income vs. Expense — {{ year }}</h3></div>
+  <div class="chart-box"><canvas id="incomeExpenseChart"></canvas></div>
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <div class="panel-head"><h3>30-day trend</h3></div>
+  <div class="chart-box"><canvas id="trendAreaChart"></canvas></div>
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <div class="panel-head"><h3>Top spending categories (all-time)</h3></div>
+  {% if category_totals %}
+  <table class="data-table">
+    <thead><tr><th>Category</th><th>Total spent</th></tr></thead>
+    <tbody>
+      {% for c in category_totals %}
+      <tr><td>{{ c['category'] }}</td><td class="mono">{{ currency_symbol }}{{ '%.2f'|format(c['total']) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state"><i class="fa-solid fa-chart-simple"></i><h3>No data yet</h3><p>Add some expenses to see category totals here.</p></div>
+  {% endif %}
+</div>
+
+<script>
+document.querySelectorAll('.export-link').forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const base = link.dataset.base;
+    const from = document.getElementById('filterFrom').value;
+    const to = document.getElementById('filterTo').value;
+    const params = new URLSearchParams();
+    if (from) params.set('date_from', from);
+    if (to) params.set('date_to', to);
+    window.location.href = base + (params.toString() ? '?' + params.toString() : '');
+  });
+});
+</script>
+{% endblock %}

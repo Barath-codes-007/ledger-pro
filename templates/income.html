@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Income — Ledger{% endblock %}
+{% block page_title %}Income{% endblock %}
+{% block page_subtitle %}{{ income|length }} entries recorded{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+  <form class="toolbar-filters" method="GET" action="{{ url_for('income') }}">
+    <input type="text" name="search" placeholder="Search source or description..." value="{{ search }}" style="min-width:260px;">
+    <button type="submit" class="btn btn-outline btn-sm"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
+  </form>
+  <a href="{{ url_for('add_income') }}" class="btn btn-accent"><i class="fa-solid fa-plus"></i> Add Income</a>
+</div>
+
+<div class="table-wrap">
+  {% if income %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Source</th>
+        <th>Description</th>
+        <th>Date</th>
+        <th>Amount</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in income %}
+      <tr>
+        <td><span class="chip chip-green"><i class="fa-solid fa-sack-dollar"></i> {{ i['source'] }}</span></td>
+        <td>{{ i['description'] or '—' }}</td>
+        <td class="mono">{{ i['date'] }}</td>
+        <td class="mono" style="color:var(--ledger-green); font-weight:600;">+{{ currency_symbol }}{{ '%.2f'|format(i['amount']) }}</td>
+        <td>
+          <div class="row-actions">
+            <a href="{{ url_for('edit_income', income_id=i['id']) }}" title="Edit"><i class="fa-solid fa-pen"></i></a>
+            <form method="POST" action="{{ url_for('delete_income', income_id=i['id']) }}" data-confirm="Delete this income entry?">
+              <button type="submit" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <i class="fa-solid fa-sack-dollar"></i>
+    <h3>No income recorded yet</h3>
+    <p>Add your first income source to see it here.</p>
+    <a href="{{ url_for('add_income') }}" class="btn btn-accent btn-sm">Add Income</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

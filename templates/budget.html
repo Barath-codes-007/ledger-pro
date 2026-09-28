@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Budget — Ledger{% endblock %}
+{% block page_title %}Budget &amp; Goals{% endblock %}
+{% block page_subtitle %}Plan your spending, track your savings{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid">
+  <div>
+    <div class="panel">
+      <div class="panel-head"><h3>This month's budget</h3></div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--text-muted); margin-bottom:10px;">
+        <span>{{ currency_symbol }}{{ '%.2f'|format(spent) }} spent of {{ currency_symbol }}{{ '%.2f'|format(budget_amount) }}</span>
+        <span>{{ pct }}%</span>
+      </div>
+      <div class="progress-track" style="height:14px;">
+        <div class="progress-fill {{ 'danger' if pct >= 90 else ('warn' if pct >= 70 else '') }}" style="width:{{ pct }}%;"></div>
+      </div>
+      <p style="font-size:12.5px; color:var(--text-muted); margin-top:10px;">
+        {% if budget_amount %}
+          {{ currency_symbol }}{{ '%.2f'|format(remaining) }} remaining this month.
+        {% else %}
+          You haven't set a budget yet — use the form to get started.
+        {% endif %}
+      </p>
+
+      <form method="POST" action="{{ url_for('budget') }}" style="margin-top:22px;">
+        <div class="field-row">
+          <div class="field">
+            <label for="amount">Monthly budget</label>
+            <input type="number" id="amount" step="0.01" min="0" name="amount" value="{{ budget_amount }}" required>
+          </div>
+          <div class="field">
+            <label for="savings_goal">Savings goal</label>
+            <input type="number" id="savings_goal" step="0.01" min="0" name="savings_goal" value="{{ savings_goal }}">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-accent">Save Budget</button>
+      </form>
+    </div>
+
+    <div class="panel" style="margin-top:20px;">
+      <div class="panel-head"><h3>Recurring expenses</h3></div>
+      {% if recurring %}
+        {% for r in recurring %}
+        <div class="recurring-item">
+          <div>
+            <div style="font-weight:600; font-size:13.5px;">{{ r['category'] }} <span class="chip chip-gray" style="margin-left:6px;">{{ r['frequency'] }}</span></div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:3px;">Next: {{ r['next_date'] }} {{ '· ' + r['description'] if r['description'] }}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:14px;">
+            <span class="mono" style="font-weight:600;">{{ currency_symbol }}{{ '%.2f'|format(r['amount']) }}</span>
+            <form method="POST" action="{{ url_for('delete_recurring', rec_id=r['id']) }}" data-confirm="Remove this recurring expense?">
+              <button type="submit" class="row-actions" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--border);color:var(--text-muted);background:var(--surface);"><i class="fa-solid fa-trash"></i></button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state" style="padding:30px;">
+          <i class="fa-solid fa-rotate"></i>
+          <h3>No recurring expenses</h3>
+          <p>Add subscriptions or bills that repeat automatically.</p>
+        </div>
+      {% endif %}
+
+      <form method="POST" action="{{ url_for('add_recurring') }}" style="margin-top:16px; border-top:1px dashed var(--border); padding-top:18px;">
+        <div class="field-row">
+          <div class="field">
+            <label for="rcategory">Category</label>
+            <select id="rcategory" name="category">
+              {% for c in category_icons %}
+              <option value="{{ c }}">{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="ramount">Amount</label>
+            <input type="number" id="ramount" step="0.01" min="0.01" name="amount" required>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="frequency">Frequency</label>
+            <select id="frequency" name="frequency">
+              <option>Weekly</option>
+              <option selected>Monthly</option>
+              <option>Yearly</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="next_date">Next due date</label>
+            <input type="date" id="next_date" name="next_date" required>
+          </div>
+        </div>
+        <div class="field">
+          <label for="rdescription">Description</label>
+          <input type="text" id="rdescription" name="description" placeholder="e.g. Netflix subscription">
+        </div>
+        <button type="submit" class="btn btn-outline btn-sm"><i class="fa-solid fa-plus"></i> Add Recurring Expense</button>
+      </form>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <div class="panel-head"><h3>Savings goal progress</h3></div>
+      <div class="stat-value mono" style="font-size:24px;">{{ currency_symbol }}{{ '%.2f'|format(savings_goal) }}</div>
+      <p style="font-size:12.5px;color:var(--text-muted);margin-top:6px;">Set a target and watch your balance grow toward it as income exceeds expenses.</p>
+    </div>
+    <div class="panel" style="margin-top:20px;">
+      <div class="panel-head"><h3>Tips</h3></div>
+      <ul style="display:flex;flex-direction:column;gap:10px;">
+        <li style="font-size:12.5px;color:var(--text-muted);"><i class="fa-solid fa-lightbulb" style="color:var(--ledger-gold);margin-right:6px;"></i>Aim to keep fixed costs under 50% of income.</li>
+        <li style="font-size:12.5px;color:var(--text-muted);"><i class="fa-solid fa-lightbulb" style="color:var(--ledger-gold);margin-right:6px;"></i>Recurring bills add up — review subscriptions monthly.</li>
+        <li style="font-size:12.5px;color:var(--text-muted);"><i class="fa-solid fa-lightbulb" style="color:var(--ledger-gold);margin-right:6px;"></i>A savings goal works best when it's automatic.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

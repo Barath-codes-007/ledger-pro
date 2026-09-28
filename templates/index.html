@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ledger — Track every dollar with clarity</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<style>
+  .landing { min-height: 100vh; display: flex; flex-direction: column; }
+  .landing-nav { display:flex; align-items:center; justify-content:space-between; padding: 24px 48px; }
+  .landing-nav .brand { display:flex; align-items:center; gap:10px; font-family: var(--font-display); font-size: 20px; font-weight:600; }
+  .landing-nav .brand .mark { width:36px;height:36px;border-radius:10px;background:var(--ledger-green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700; }
+  .landing-nav .links { display:flex; gap: 14px; align-items:center; }
+  .hero { flex:1; display:grid; grid-template-columns: 1.1fr 0.9fr; align-items:center; gap: 40px; padding: 40px 48px 80px; max-width:1240px; margin: 0 auto; width:100%; }
+  @media (max-width: 900px){ .hero{ grid-template-columns:1fr; padding: 20px 24px 60px; } .landing-nav{padding:18px 24px;} }
+  .hero h1 { font-size: 52px; line-height: 1.08; margin-bottom: 18px; }
+  .hero h1 em { font-style: normal; color: var(--ledger-green); }
+  .hero p.lead { color: var(--text-muted); font-size: 16px; max-width: 460px; margin-bottom: 28px; }
+  .hero .cta-row { display:flex; gap:14px; margin-bottom: 36px; }
+  .hero .trust { display:flex; gap: 26px; }
+  .hero .trust div span { display:block; font-family: var(--font-mono); font-size:22px; font-weight:700; }
+  .hero .trust div small { color:var(--text-muted); font-size: 11.5px; }
+  .mock-card { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-lg); padding: 26px; box-shadow: var(--shadow-lg); position:relative; }
+  .mock-card .mock-row { display:flex; justify-content:space-between; padding: 12px 0; border-bottom:1px dashed var(--border); font-size: 13px;}
+  .mock-card .mock-row:last-child{border:none;}
+  .mock-card .mock-total { font-family: var(--font-mono); font-size: 30px; font-weight:700; color: var(--ledger-green); margin: 10px 0 20px;}
+  .features { padding: 60px 48px 90px; max-width:1240px; margin:0 auto; }
+  .features h2 { text-align:center; font-size: 30px; margin-bottom: 40px; }
+  .feat-grid { display:grid; grid-template-columns: repeat(3,1fr); gap: 22px; }
+  @media (max-width:900px){ .feat-grid{grid-template-columns:1fr;} .features{padding:40px 24px;} }
+  .feat-card { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-lg); padding: 26px; }
+  .feat-card i { font-size: 22px; color: var(--ledger-green); margin-bottom: 14px; display:block;}
+  .feat-card h4 { font-size:15px; margin-bottom:6px; }
+  .feat-card p { font-size:13px; color:var(--text-muted); }
+  footer.landing-foot { text-align:center; padding: 26px; color: var(--text-muted); font-size:12.5px; border-top:1px solid var(--border);}
+</style>
+</head>
+<body>
+<div class="landing">
+  <nav class="landing-nav">
+    <div class="brand"><div class="mark">L</div> Ledger</div>
+    <div class="links">
+      <a href="{{ url_for('login') }}" class="btn btn-outline btn-sm">Log in</a>
+      <a href="{{ url_for('signup') }}" class="btn btn-primary btn-sm">Get started free</a>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div>
+      <h1>Every dollar,<br><em>accounted for.</em></h1>
+      <p class="lead">Ledger is the calm, precise way to track spending, plan budgets, and see exactly where your money goes — without the spreadsheet.</p>
+      <div class="cta-row">
+        <a href="{{ url_for('signup') }}" class="btn btn-accent">Create free account</a>
+        <a href="{{ url_for('login') }}" class="btn btn-outline">I already have an account</a>
+      </div>
+      <div class="trust">
+        <div><span class="mono">12+</span><small>Chart types</small></div>
+        <div><span class="mono">100%</span><small>Your data, your device</small></div>
+        <div><span class="mono">0$</span><small>Free to use</small></div>
+      </div>
+    </div>
+    <div class="mock-card">
+      <div style="font-size:12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;">This month</div>
+      <div class="mock-total">$2,148.32</div>
+      <div class="mock-row"><span><i class="fa-solid fa-utensils" style="color:var(--ledger-red);margin-right:8px;"></i>Food &amp; Dining</span><span class="mono">$482.10</span></div>
+      <div class="mock-row"><span><i class="fa-solid fa-house" style="color:var(--ledger-gold);margin-right:8px;"></i>Rent</span><span class="mono">$1,200.00</span></div>
+      <div class="mock-row"><span><i class="fa-solid fa-car" style="color:var(--ledger-green);margin-right:8px;"></i>Transport</span><span class="mono">$146.55</span></div>
+      <div class="mock-row"><span><i class="fa-solid fa-film" style="color:var(--muted);margin-right:8px;"></i>Entertainment</span><span class="mono">$88.20</span></div>
+    </div>
+  </section>
+
+  <section class="features">
+    <h2>Everything you need to stay on budget</h2>
+    <div class="feat-grid">
+      <div class="feat-card"><i class="fa-solid fa-chart-pie"></i><h4>Visual analytics</h4><p>Pie, bar, line and trend charts break down spending by category, week and month.</p></div>
+      <div class="feat-card"><i class="fa-solid fa-piggy-bank"></i><h4>Budgets &amp; goals</h4><p>Set a monthly budget and savings goal, and watch a live progress bar keep you honest.</p></div>
+      <div class="feat-card"><i class="fa-solid fa-rotate"></i><h4>Recurring bills</h4><p>Track subscriptions and recurring payments so nothing catches you off guard.</p></div>
+      <div class="feat-card"><i class="fa-solid fa-file-export"></i><h4>Export anywhere</h4><p>Download CSV, Excel or a formatted PDF report for any date range in one click.</p></div>
+      <div class="feat-card"><i class="fa-solid fa-magnifying-glass"></i><h4>Instant search</h4><p>Find any transaction in milliseconds with live, as-you-type search.</p></div>
+      <div class="feat-card"><i class="fa-solid fa-moon"></i><h4>Light &amp; dark mode</h4><p>A premium interface that looks sharp day or night, on any device.</p></div>
+    </div>
+  </section>
+
+  <footer class="landing-foot">&copy; {{ now_year }} Ledger. Built for people who like knowing where their money goes.</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Add Income — Ledger{% endblock %}
+{% block page_title %}Add Income{% endblock %}
+{% block page_subtitle %}Log a new income entry{% endblock %}
+
+{% block content %}
+<div class="panel form-card">
+  <form method="POST" action="{{ url_for('add_income') }}">
+    <div class="field">
+      <label for="source">Source</label>
+      <input type="text" id="source" name="source" placeholder="e.g. Salary, Freelance, Dividends" required>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="amount">Amount</label>
+        <input type="number" id="amount" step="0.01" min="0.01" name="amount" placeholder="0.00" required>
+      </div>
+      <div class="field">
+        <label for="date">Date</label>
+        <input type="date" id="date" name="date" required>
+      </div>
+    </div>
+    <div class="field">
+      <label for="description">Description</label>
+      <textarea id="description" name="description" rows="2" placeholder="Optional note"></textarea>
+    </div>
+    <div style="display:flex; gap:12px; margin-top:22px;">
+      <button type="submit" class="btn btn-accent">Save Income</button>
+      <a href="{{ url_for('income') }}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+</div>
+<script>document.getElementById('date').valueAsDate = new Date();</script>
+{% endblock %}
