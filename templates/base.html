@@ -55,6 +55,7 @@
       <a href="{{ url_for('goals') }}" class="{{ 'active' if request.endpoint == 'goals' }}"><i class="fa-solid fa-bullseye"></i> Goals</a>
       <a href="{{ url_for('accounts') }}" class="{{ 'active' if request.endpoint == 'accounts' }}"><i class="fa-solid fa-building-columns"></i> Accounts &amp; Transfers</a>
       <a href="{{ url_for('net_worth_page') }}" class="{{ 'active' if request.endpoint == 'net_worth_page' }}"><i class="fa-solid fa-scale-balanced"></i> Net Worth</a>
+      <a href="{{ url_for('statements') }}" class="{{ 'active' if request.endpoint == 'statements' }}"><i class="fa-solid fa-file-invoice-dollar"></i> Statements</a>
       <a href="{{ url_for('subscriptions') }}" class="{{ 'active' if request.endpoint == 'subscriptions' }}"><i class="fa-solid fa-rotate"></i> Subscriptions</a>
 
       <div class="nav-label">Data</div>

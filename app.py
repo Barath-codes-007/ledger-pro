@@ -1379,6 +1379,22 @@ def add_transfer():
     return redirect(url_for("accounts"))
 
 
+@app.route("/statements")
+@login_required
+def statements():
+    uid = session["user_id"]
+    today = datetime.now()
+    date_from = request.args.get("date_from") or today.replace(day=1).strftime("%Y-%m-%d")
+    date_to = request.args.get("date_to") or today.strftime("%Y-%m-%d")
+    conn = get_db_connection()
+    inc_stmt = services.income_statement(conn, uid, date_from, date_to)
+    bs = services.balance_sheet(conn, uid)
+    cfs = services.cash_flow_statement(conn, uid, date_from, date_to)
+    conn.close()
+    return render_template("statements.html", date_from=date_from, date_to=date_to,
+                            inc=inc_stmt, bs=bs, cfs=cfs, to_major=to_major)
+
+
 @app.route("/net-worth")
 @login_required
 def net_worth_page():

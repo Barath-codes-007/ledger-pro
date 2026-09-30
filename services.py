@@ -355,3 +355,65 @@ def create_adjustment(conn, user_id, category, amount, date, currency, descripti
     post_expense_journal(conn, user_id, f"adjustment:{cur.lastrowid}", category, amount_minor, date)
     record_audit(conn, user_id, "adjustment_created", "expense", cur.lastrowid, {"amount_minor": amount_minor})
     return cur.lastrowid, None
+
+
+# ---------------------------------------------------------------------------
+# Financial statements (#18) - built from actual stored transactions, not
+# a separate model. Each statement is a different view of the same data
+# already used by the dashboard and cash-flow page.
+# ---------------------------------------------------------------------------
+def income_statement(conn, user_id, start_date, end_date):
+    income_minor = conn.execute(
+        "SELECT COALESCE(SUM(amount_minor),0) t FROM income WHERE user_id=? AND date>=? AND date<=? AND is_deleted=0",
+        (user_id, start_date, end_date)).fetchone()["t"] or 0
+    expense_minor = conn.execute(
+        "SELECT COALESCE(SUM(amount_minor),0) t FROM expenses WHERE user_id=? AND date>=? AND date<=? AND is_deleted=0",
+        (user_id, start_date, end_date)).fetchone()["t"] or 0
+    by_category = conn.execute(
+        "SELECT category, SUM(amount_minor) t FROM expenses WHERE user_id=? AND date>=? AND date<=? AND is_deleted=0 "
+        "GROUP BY category ORDER BY t DESC",
+        (user_id, start_date, end_date)).fetchall()
+    by_source = conn.execute(
+        "SELECT source, SUM(amount_minor) t FROM income WHERE user_id=? AND date>=? AND date<=? AND is_deleted=0 "
+        "GROUP BY source ORDER BY t DESC",
+        (user_id, start_date, end_date)).fetchall()
+    return {
+        "income_minor": income_minor, "expense_minor": expense_minor,
+        "net_income_minor": income_minor - expense_minor,
+        "by_category": [{"label": r["category"], "amount_minor": r["t"]} for r in by_category],
+        "by_source": [{"label": r["source"], "amount_minor": r["t"]} for r in by_source],
+    }
+
+
+def balance_sheet(conn, user_id, as_of_date=None):
+    """Point-in-time snapshot. Since accounts hold a running balance rather
+    than dated postings, this reflects the CURRENT balance regardless of
+    as_of_date - which is stated plainly on the statement rather than
+    implied as a true historical balance."""
+    accounts = list_accounts(conn, user_id)
+    assets = [{"name": a["name"], "type": a["type"], "amount_minor": a["balance_minor"]}
+              for a in accounts if not a["is_liability"]]
+    liabilities = [{"name": a["name"], "type": a["type"], "amount_minor": -a["balance_minor"]}
+                   for a in accounts if a["is_liability"]]
+    total_assets = sum(a["amount_minor"] for a in assets)
+    total_liabilities = sum(l["amount_minor"] for l in liabilities)
+    return {
+        "assets": assets, "liabilities": liabilities,
+        "total_assets_minor": total_assets, "total_liabilities_minor": total_liabilities,
+        "net_worth_minor": total_assets - total_liabilities,
+    }
+
+
+def cash_flow_statement(conn, user_id, start_date, end_date):
+    cf = cash_flow(conn, user_id, start_date, end_date)
+    transfers_out = conn.execute(
+        "SELECT COALESCE(SUM(amount_minor),0) t FROM transfers WHERE user_id=? AND date>=? AND date<=?",
+        (user_id, start_date, end_date)).fetchone()["t"] or 0
+    return {
+        "opening_minor": cf["opening_minor"],
+        "cash_in_minor": cf["income_minor"],
+        "cash_out_minor": cf["expenses_minor"],
+        "net_cash_flow_minor": cf["income_minor"] - cf["expenses_minor"],
+        "closing_minor": cf["closing_minor"],
+        "transfer_volume_minor": transfers_out,  # informational: moved between own accounts, net-zero
+    }
