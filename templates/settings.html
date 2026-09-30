@@ -65,6 +65,24 @@
   </div>
 
   <div class="settings-panel" id="tab-security">
+    <div class="settings-row" style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px;">
+      <div>
+        <div class="sr-title">Last login</div>
+        <div class="sr-desc">{{ last_login or 'This is your first session.' }}</div>
+      </div>
+    </div>
+    <div class="settings-row" style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px;">
+      <div>
+        <div class="sr-title">Two-factor authentication</div>
+        <div class="sr-desc">Coming soon.</div>
+      </div>
+    </div>
+    <div class="settings-row" style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px;">
+      <div>
+        <div class="sr-title">Passkeys</div>
+        <div class="sr-desc">Coming soon.</div>
+      </div>
+    </div>
     <form method="POST" action="{{ url_for('change_password') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="field">
@@ -74,11 +92,11 @@
       <div class="field-row">
         <div class="field">
           <label for="new_password">New password</label>
-          <input type="password" id="new_password" name="new_password" minlength="6" required>
+          <input type="password" id="new_password" name="new_password" minlength="8" required>
         </div>
         <div class="field">
           <label for="confirm_password">Confirm new password</label>
-          <input type="password" id="confirm_password" name="confirm_password" minlength="6" required>
+          <input type="password" id="confirm_password" name="confirm_password" minlength="8" required>
         </div>
       </div>
       <button type="submit" class="btn btn-accent">Change Password</button>

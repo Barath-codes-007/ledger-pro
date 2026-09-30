@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initLiveSearch();
   initToasts();
   initCountUp();
+  initCommandPalette();
 });
 
 /* ---------- Page loader (fades out once DOM ready) ---------- */
@@ -170,3 +171,97 @@ document.addEventListener("change", (e) => {
     }
   }
 });
+
+/* ---------- Command palette & keyboard shortcuts ---------- */
+function initCommandPalette() {
+  const routes = window.LEDGER_ROUTES || {};
+  const commands = [
+    { label: "Add Expense", key: "N", url: routes.add_expense },
+    { label: "Add Income", key: "I", url: routes.add_income },
+    { label: "Accounts & Transfers", key: "A", url: routes.accounts },
+    { label: "Budget", key: "B", url: routes.budget },
+    { label: "Goals", key: "G", url: routes.goals },
+    { label: "Reports", key: "R", url: routes.reports },
+    { label: "Net Worth", url: routes.net_worth },
+    { label: "Subscriptions", url: routes.subscriptions },
+    { label: "Toggle Dark Mode", action: () => document.querySelector(".theme-toggle")?.click() },
+  ].filter((c) => c.url || c.action);
+
+  const overlay = document.createElement("div");
+  overlay.className = "cmdk-overlay";
+  overlay.innerHTML = `
+    <div class="cmdk-box">
+      <input type="text" class="cmdk-input" placeholder="Search commands...">
+      <div class="cmdk-list"></div>
+    </div>`;
+  overlay.style.cssText = "display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;align-items:flex-start;justify-content:center;padding-top:12vh;";
+  document.body.appendChild(overlay);
+  const box = overlay.querySelector(".cmdk-box");
+  box.style.cssText = "background:var(--card-bg,#fff);border-radius:12px;width:min(480px,90vw);box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;";
+  const input = overlay.querySelector(".cmdk-input");
+  input.style.cssText = "width:100%;box-sizing:border-box;padding:16px;border:0;border-bottom:1px solid var(--border,#e2e8f0);font-size:15px;outline:none;background:transparent;color:inherit;";
+  const list = overlay.querySelector(".cmdk-list");
+  list.style.cssText = "max-height:320px;overflow-y:auto;";
+
+  function render(filter = "") {
+    const f = filter.toLowerCase();
+    list.innerHTML = "";
+    commands.filter((c) => c.label.toLowerCase().includes(f)).forEach((c) => {
+      const row = document.createElement("div");
+      row.textContent = c.label;
+      row.style.cssText = "padding:12px 16px;cursor:pointer;font-size:14px;";
+      row.addEventListener("mouseenter", () => (row.style.background = "rgba(127,127,127,.12)"));
+      row.addEventListener("mouseleave", () => (row.style.background = "transparent"));
+      row.addEventListener("click", () => {
+        close();
+        if (c.action) c.action();
+        else if (c.url) window.location.href = c.url;
+      });
+      list.appendChild(row);
+    });
+  }
+
+  function open() {
+    overlay.style.display = "flex";
+    input.value = "";
+    render();
+    setTimeout(() => input.focus(), 0);
+  }
+  function close() {
+    overlay.style.display = "none";
+  }
+
+  input.addEventListener("input", () => render(input.value));
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    const tag = (e.target.tagName || "").toLowerCase();
+    const typing = tag === "input" || tag === "textarea" || e.target.isContentEditable;
+
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      overlay.style.display === "flex" ? close() : open();
+      return;
+    }
+    if (overlay.style.display === "flex") {
+      if (e.key === "Escape") close();
+      return;
+    }
+    if (typing) return;
+
+    if (e.key === "/") {
+      const search = document.getElementById("globalSearch");
+      if (search) {
+        e.preventDefault();
+        search.focus();
+      }
+      return;
+    }
+    const shortcut = { n: "add_expense", i: "add_income", a: "accounts", b: "budget", g: "goals", r: "reports" }[e.key.toLowerCase()];
+    if (shortcut && routes[shortcut]) {
+      window.location.href = routes[shortcut];
+    }
+  });
+}
