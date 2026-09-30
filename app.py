@@ -139,6 +139,7 @@ def inject_globals():
     return dict(
         current_user=user,
         currency_symbol=get_user_currency_symbol(user),
+        user_currency=(user["currency"] if user else DEFAULT_CURRENCY),
         csrf_token=lambda: security.get_csrf_token(session),
         category_icons=CATEGORY_ICONS,
         payment_modes=PAYMENT_MODES,
@@ -406,6 +407,13 @@ def add_expense():
         description = request.form.get("description", "").strip()
         date = request.form.get("date")
         payment_mode = request.form.get("payment_mode", "Cash")
+        merchant = request.form.get("merchant", "").strip() or None
+        conn_cur = get_db_connection()
+        user_row = conn_cur.execute("SELECT currency FROM users WHERE id=?", (uid,)).fetchone()
+        conn_cur.close()
+        currency = request.form.get("currency") or (user_row["currency"] if user_row else DEFAULT_CURRENCY)
+        if currency not in CURRENCIES:
+            currency = user_row["currency"] if user_row else DEFAULT_CURRENCY
 
         if category == "Other" and custom_category:
             final_category = custom_category
@@ -439,9 +447,9 @@ def add_expense():
         dupes = services.find_possible_duplicate(conn, uid, amount_minor, date, final_category)
         cur = conn.execute(
             """INSERT INTO expenses
-               (user_id, category, custom_category, icon, amount, amount_minor, description, date, payment_mode, receipt_path, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (uid, final_category, custom_category, icon, amount, amount_minor, description, date, payment_mode, receipt_path, now_iso())
+               (user_id, category, custom_category, icon, amount, amount_minor, description, date, payment_mode, receipt_path, currency, merchant, txn_type, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'expense', ?)""",
+            (uid, final_category, custom_category, icon, amount, amount_minor, description, date, payment_mode, receipt_path, currency, merchant, now_iso())
         )
         services.record_audit(conn, uid, "expense_created", "expense", cur.lastrowid,
                                {"category": final_category, "amount_minor": amount_minor})

@@ -26,3 +26,28 @@ def test_dashboard_totals_are_exact_with_many_small_amounts(alice):
     html = alice.get("/dashboard").get_data(as_text=True)
     assert "2.00" in html
     assert "1.9999999999" not in html and "2.0000000000" not in html
+
+
+def test_expense_preserves_original_currency(alice):
+    from conftest import post
+    from database import get_db_connection
+    post(alice, "/expenses/add", {"category": "Food", "amount": "20", "date": "2026-09-10",
+                                   "payment_mode": "Cash", "description": "coffee", "currency": "USD"},
+         content_type="multipart/form-data")
+    conn = get_db_connection()
+    row = conn.execute("SELECT currency FROM expenses WHERE description='coffee'").fetchone()
+    conn.close()
+    assert row["currency"] == "USD"
+
+
+def test_changing_display_currency_does_not_rewrite_past_transactions(alice):
+    from conftest import post
+    from database import get_db_connection
+    post(alice, "/expenses/add", {"category": "Food", "amount": "20", "date": "2026-09-10",
+                                   "payment_mode": "Cash", "description": "coffee", "currency": "USD"},
+         content_type="multipart/form-data")
+    post(alice, "/settings/profile", {"name": "Alice", "currency": "EUR", "language": "English"})
+    conn = get_db_connection()
+    row = conn.execute("SELECT currency FROM expenses WHERE description='coffee'").fetchone()
+    conn.close()
+    assert row["currency"] == "USD"  # untouched despite the account switching to EUR

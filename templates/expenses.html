@@ -52,7 +52,10 @@
             <a href="{{ url_for('receipt', expense_id=e['id']) }}" target="_blank" class="chip chip-gray"><i class="fa-solid fa-paperclip"></i> View</a>
           {% else %}—{% endif %}
         </td>
-        <td class="mono" style="color:var(--ledger-red); font-weight:600;">-{{ currency_symbol }}{{ '%.2f'|format(e['amount']) }}</td>
+        <td class="mono" style="color:var(--ledger-red); font-weight:600;">
+          -{{ currency_symbol }}{{ '%.2f'|format(e['amount']) }}
+          {% if e['currency'] and e['currency'] != user_currency %}<span class="chip chip-gray" style="font-size:10px;margin-left:4px;">{{ e['currency'] }}</span>{% endif %}
+        </td>
         <td>
           <div class="row-actions">
             <a href="{{ url_for('edit_expense', expense_id=e['id']) }}" title="Edit"><i class="fa-solid fa-pen"></i></a>

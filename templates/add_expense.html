@@ -43,6 +43,21 @@
       <textarea id="description" name="description" rows="2" placeholder="What was this for?"></textarea>
     </div>
 
+    <div class="field-row">
+      <div class="field">
+        <label for="merchant">Merchant (optional)</label>
+        <input type="text" id="merchant" name="merchant" maxlength="80" placeholder="e.g. Amazon">
+      </div>
+      <div class="field">
+        <label for="currency">Currency</label>
+        <select id="currency" name="currency">
+          {% for code, symbol in currencies.items() %}
+          <option value="{{ code }}" {{ 'selected' if code == user_currency }}>{{ code }} ({{ symbol }})</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
     <div class="field">
       <label for="payment_mode">Payment mode</label>
       <select id="payment_mode" name="payment_mode">

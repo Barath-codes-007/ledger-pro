@@ -213,6 +213,11 @@ def init_db():
         cur.execute("ALTER TABLE income ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
 
     conn.commit()
+
+    import migrations
+    migrations.run_all(conn, os.environ.get("LEDGER_DB_PATH", DB_PATH))
+
+    conn.commit()
     conn.close()
 
 
