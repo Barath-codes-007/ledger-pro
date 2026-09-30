@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Accounts — Ledger{% endblock %}
+{% block page_title %}Accounts &amp; Transfers{% endblock %}
+{% block page_subtitle %}Your bank accounts, cash and cards in one place{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid">
+  <div>
+    <div class="panel">
+      <div class="panel-head"><h3>My Accounts</h3></div>
+      {% if accounts %}
+        <table class="table">
+          <thead><tr><th>Name</th><th>Type</th><th>Balance</th><th></th></tr></thead>
+          <tbody>
+          {% for a in accounts %}
+            <tr>
+              <td>{{ a['name'] }}{% if a['notes'] %}<div style="font-size:12px;color:var(--text-muted);">{{ a['notes'] }}</div>{% endif %}</td>
+              <td><span class="chip chip-gray">{{ a['type'] }}</span></td>
+              <td class="mono" style="color: {{ 'var(--ledger-red)' if to_major(a['balance_minor']) < 0 else 'inherit' }};">
+                {{ currency_symbol }}{{ '%.2f'|format(to_major(a['balance_minor'])) }}
+              </td>
+              <td>
+                <a href="{{ url_for('reconcile_account', account_id=a['id']) }}" class="chip chip-gray" style="margin-right:6px;">Reconcile</a>
+                <form method="POST" action="{{ url_for('archive_account_route', account_id=a['id']) }}" data-confirm="Archive this account? It will be hidden from your account list." style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="chip chip-gray" style="border:0;cursor:pointer;">Archive</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p style="color:var(--text-muted);font-size:13px;">No accounts yet. Add your first account to start tracking your financial position.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel" style="margin-top:20px;">
+      <div class="panel-head"><h3>Transfer money</h3></div>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Transfers move money between your own accounts. They are never counted as income or expense.</p>
+      <form method="POST" action="{{ url_for('add_transfer') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field-row">
+          <div class="field">
+            <label for="from_account_id">From</label>
+            <select id="from_account_id" name="from_account_id" required>
+              {% for a in accounts %}<option value="{{ a['id'] }}">{{ a['name'] }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="to_account_id">To</label>
+            <select id="to_account_id" name="to_account_id" required>
+              {% for a in accounts %}<option value="{{ a['id'] }}">{{ a['name'] }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="t_amount">Amount</label>
+            <input type="number" id="t_amount" name="amount" step="0.01" min="0.01" required>
+          </div>
+          <div class="field">
+            <label for="t_date">Date</label>
+            <input type="date" id="t_date" name="date" required>
+          </div>
+        </div>
+        <div class="field">
+          <label for="t_note">Note (optional)</label>
+          <input type="text" id="t_note" name="note" maxlength="200">
+        </div>
+        <button type="submit" class="btn btn-accent" {{ 'disabled' if accounts|length < 2 }}>Transfer</button>
+        {% if accounts|length < 2 %}<p style="font-size:12px;color:var(--text-muted);margin-top:8px;">Add at least two accounts to transfer between them.</p>{% endif %}
+      </form>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <div class="panel-head"><h3>Add an account</h3></div>
+      <form method="POST" action="{{ url_for('accounts') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field">
+          <label for="name">Account name</label>
+          <input type="text" id="name" name="name" maxlength="80" required>
+        </div>
+        <div class="field">
+          <label for="type">Type</label>
+          <select id="type" name="type" required>
+            {% for t in account_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="opening_balance">Opening balance</label>
+          <input type="number" id="opening_balance" name="opening_balance" step="0.01" value="0">
+        </div>
+        <div class="field">
+          <label for="notes">Notes (optional)</label>
+          <input type="text" id="notes" name="notes" maxlength="200">
+        </div>
+        <button type="submit" class="btn btn-accent">Add Account</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

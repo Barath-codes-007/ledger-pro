@@ -22,8 +22,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import pandas as pd
 
-from database import get_db_connection, init_db, now_iso
+from database import get_db_connection, init_db, now_iso, backfill_minor_units
 import security
+import services
+from money import to_minor, to_major, format_amount
 
 # ---------------------------------------------------------------------------
 # App configuration
@@ -216,7 +218,6 @@ def login():
 
         conn = get_db_connection()
         user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-        conn.close()
 
         if user and check_password_hash(user["password_hash"], password):
             login_limiter.reset(key)
@@ -224,10 +225,14 @@ def login():
             session.permanent = True
             session["user_id"] = user["id"]
             session["user_name"] = user["name"]
+            services.record_audit(conn, user["id"], "login_success", "user", user["id"], {"ip": client_ip()})
+            conn.commit()
+            conn.close()
             log.info("login_success user_id=%s", user["id"])
             flash(f"Welcome back, {user['name']}!", "success")
             return redirect(url_for("dashboard"))
 
+        conn.close()
         login_limiter.record_failure(key)
         log.warning("login_failed ip=%s", key[0])
         flash("Invalid email or password.", "error")
@@ -297,10 +302,14 @@ def dashboard():
         "SELECT * FROM expenses WHERE user_id = ? ORDER BY date DESC, id DESC LIMIT 6", (uid,)
     ).fetchall()
 
-    # Financial health score: simple heuristic out of 100
-    savings_rate = ((total_income - total_expense) / total_income * 100) if total_income else 0
-    budget_score = max(0, 100 - budget_pct) if monthly_budget else 50
-    health_score = int(max(0, min(100, (savings_rate * 0.6) + (budget_score * 0.4))))
+    # Transparent metrics instead of an opaque "health score" (see #54): each
+    # number here is directly traceable to a stored value, nothing blended.
+    savings_rate = round(((total_income - total_expense) / total_income * 100), 1) if total_income else 0
+
+    services.process_due_recurring(conn, uid, today_str)
+    nw = services.net_worth(conn, uid)
+    cf = services.cash_flow(conn, uid, month_start, today_str)
+    conn.commit()
 
     conn.close()
 
@@ -319,8 +328,12 @@ def dashboard():
         budget_pct=min(budget_pct, 100),
         remaining_budget=remaining_budget,
         recent=recent,
-        health_score=health_score,
         savings=balance,
+        savings_rate=savings_rate,
+        net_worth=to_major(nw["net_worth_minor"]),
+        assets_total=to_major(nw["assets_minor"]),
+        liabilities_total=to_major(nw["liabilities_minor"]),
+        cash_flow_month=to_major(cf["income_minor"] - cf["expenses_minor"]),
     )
 
 
@@ -415,18 +428,25 @@ def add_expense():
                 return redirect(url_for("add_expense"))
 
         icon = CATEGORY_ICONS.get(category, "fa-receipt")
+        amount_minor = to_minor(amount)
 
         conn = get_db_connection()
-        conn.execute(
+        dupes = services.find_possible_duplicate(conn, uid, amount_minor, date, final_category)
+        cur = conn.execute(
             """INSERT INTO expenses
-               (user_id, category, custom_category, icon, amount, description, date, payment_mode, receipt_path, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (uid, final_category, custom_category, icon, amount, description, date, payment_mode, receipt_path, now_iso())
+               (user_id, category, custom_category, icon, amount, amount_minor, description, date, payment_mode, receipt_path, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (uid, final_category, custom_category, icon, amount, amount_minor, description, date, payment_mode, receipt_path, now_iso())
         )
+        services.record_audit(conn, uid, "expense_created", "expense", cur.lastrowid,
+                               {"category": final_category, "amount_minor": amount_minor})
         conn.commit()
         conn.close()
 
-        flash("Expense added successfully!", "success")
+        if dupes:
+            flash(f"Expense added. Note: a similar {final_category} expense already exists around this date.", "warning")
+        else:
+            flash("Expense added successfully!", "success")
         return redirect(url_for("expenses"))
 
     return render_template("add_expense.html", categories=list(CATEGORY_ICONS.keys()))
@@ -467,11 +487,13 @@ def edit_expense(expense_id):
             return redirect(url_for("edit_expense", expense_id=expense_id))
 
         icon = CATEGORY_ICONS.get(category, "fa-receipt")
+        amount_minor = to_minor(amount)
         conn.execute(
-            """UPDATE expenses SET category=?, icon=?, amount=?, description=?, date=?, payment_mode=?
+            """UPDATE expenses SET category=?, icon=?, amount=?, amount_minor=?, description=?, date=?, payment_mode=?
                WHERE id=? AND user_id=?""",
-            (category, icon, amount, description, date, payment_mode, expense_id, uid)
+            (category, icon, amount, amount_minor, description, date, payment_mode, expense_id, uid)
         )
+        services.record_audit(conn, uid, "expense_updated", "expense", expense_id, {"category": category})
         conn.commit()
         conn.close()
         flash("Expense updated successfully!", "success")
@@ -486,7 +508,11 @@ def edit_expense(expense_id):
 def delete_expense(expense_id):
     uid = session["user_id"]
     conn = get_db_connection()
+    row = conn.execute("SELECT category, amount FROM expenses WHERE id=? AND user_id=?", (expense_id, uid)).fetchone()
     conn.execute("DELETE FROM expenses WHERE id = ? AND user_id = ?", (expense_id, uid))
+    if row:
+        services.record_audit(conn, uid, "expense_deleted", "expense", expense_id,
+                               {"category": row["category"], "amount": row["amount"]})
     conn.commit()
     conn.close()
     flash("Expense deleted.", "success")
@@ -537,11 +563,13 @@ def add_income():
             flash("Please enter a valid positive amount.", "error")
             return redirect(url_for("add_income"))
 
+        amount_minor = to_minor(amount)
         conn = get_db_connection()
-        conn.execute(
-            "INSERT INTO income (user_id, source, amount, description, date, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (uid, source, amount, description, date, now_iso())
+        cur = conn.execute(
+            "INSERT INTO income (user_id, source, amount, amount_minor, description, date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (uid, source, amount, amount_minor, description, date, now_iso())
         )
+        services.record_audit(conn, uid, "income_created", "income", cur.lastrowid, {"source": source})
         conn.commit()
         conn.close()
         flash("Income added successfully!", "success")
@@ -571,10 +599,12 @@ def edit_income(income_id):
             flash("Please enter a valid amount.", "error")
             return redirect(url_for("edit_income", income_id=income_id))
 
+        amount_minor = to_minor(amount)
         conn.execute(
-            "UPDATE income SET source=?, amount=?, description=?, date=? WHERE id=? AND user_id=?",
-            (source, amount, description, date, income_id, uid)
+            "UPDATE income SET source=?, amount=?, amount_minor=?, description=?, date=? WHERE id=? AND user_id=?",
+            (source, amount, amount_minor, description, date, income_id, uid)
         )
+        services.record_audit(conn, uid, "income_updated", "income", income_id, {"source": source})
         conn.commit()
         conn.close()
         flash("Income updated successfully!", "success")
@@ -590,6 +620,7 @@ def delete_income(income_id):
     uid = session["user_id"]
     conn = get_db_connection()
     conn.execute("DELETE FROM income WHERE id = ? AND user_id = ?", (income_id, uid))
+    services.record_audit(conn, uid, "income_deleted", "income", income_id)
     conn.commit()
     conn.close()
     flash("Income deleted.", "success")
@@ -707,20 +738,38 @@ def delete_recurring(rec_id):
 # ---------------------------------------------------------------------------
 # Reports
 # ---------------------------------------------------------------------------
-def get_report_dataframe(uid, date_from=None, date_to=None):
+def get_report_dataframe(uid, date_from=None, date_to=None, txn_type=None, category=None):
+    """
+    Build the export dataset from actual stored transactions. Includes both
+    expenses and income (labelled by `type`) so reports reflect real cash
+    flow, not expenses alone.
+    """
     conn = get_db_connection()
-    query = "SELECT date, category, description, payment_mode, amount FROM expenses WHERE user_id = ?"
-    params = [uid]
-    if date_from:
-        query += " AND date >= ?"
-        params.append(date_from)
-    if date_to:
-        query += " AND date <= ?"
-        params.append(date_to)
-    query += " ORDER BY date DESC"
-    rows = conn.execute(query, params).fetchall()
+    frames = []
+
+    if txn_type in (None, "", "expense"):
+        q = "SELECT date, category, description, payment_mode, amount, 'expense' AS type FROM expenses WHERE user_id = ?"
+        params = [uid]
+        if date_from:
+            q += " AND date >= ?"; params.append(date_from)
+        if date_to:
+            q += " AND date <= ?"; params.append(date_to)
+        if category:
+            q += " AND category = ?"; params.append(category)
+        frames.extend(dict(r) for r in conn.execute(q, params).fetchall())
+
+    if txn_type in (None, "", "income"):
+        q = "SELECT date, source AS category, description, 'Income' AS payment_mode, amount, 'income' AS type FROM income WHERE user_id = ?"
+        params = [uid]
+        if date_from:
+            q += " AND date >= ?"; params.append(date_from)
+        if date_to:
+            q += " AND date <= ?"; params.append(date_to)
+        frames.extend(dict(r) for r in conn.execute(q, params).fetchall())
+
     conn.close()
-    return pd.DataFrame([dict(r) for r in rows])
+    df = pd.DataFrame(frames, columns=["date", "category", "description", "payment_mode", "amount", "type"])
+    return df.sort_values("date", ascending=False, kind="stable").reset_index(drop=True) if not df.empty else df
 
 
 @app.route("/reports")
@@ -754,7 +803,8 @@ def reports():
 @login_required
 def export_csv():
     uid = session["user_id"]
-    df = get_report_dataframe(uid, request.args.get("date_from"), request.args.get("date_to"))
+    df = get_report_dataframe(uid, request.args.get("date_from"), request.args.get("date_to"),
+                               request.args.get("type"), request.args.get("category"))
     buf = io.StringIO()
     df.to_csv(buf, index=False)
     mem = io.BytesIO(buf.getvalue().encode("utf-8"))
@@ -767,7 +817,8 @@ def export_csv():
 @login_required
 def export_excel():
     uid = session["user_id"]
-    df = get_report_dataframe(uid, request.args.get("date_from"), request.args.get("date_to"))
+    df = get_report_dataframe(uid, request.args.get("date_from"), request.args.get("date_to"),
+                               request.args.get("type"), request.args.get("category"))
     mem = io.BytesIO()
     with pd.ExcelWriter(mem, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Expenses")
@@ -780,7 +831,8 @@ def export_excel():
 @login_required
 def export_pdf():
     uid = session["user_id"]
-    df = get_report_dataframe(uid, request.args.get("date_from"), request.args.get("date_to"))
+    df = get_report_dataframe(uid, request.args.get("date_from"), request.args.get("date_to"),
+                               request.args.get("type"), request.args.get("category"))
 
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import letter
@@ -788,23 +840,50 @@ def export_pdf():
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.lib.units import inch
 
+    conn_user = get_db_connection()
+    user = conn_user.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+    symbol = get_user_currency_symbol(user)
+    conn_user.close()
+
+    income_total = df[df["type"] == "income"]["amount"].sum() if not df.empty else 0
+    expense_total = df[df["type"] == "expense"]["amount"].sum() if not df.empty else 0
+    date_from = request.args.get("date_from") or (df["date"].min() if not df.empty else "-")
+    date_to = request.args.get("date_to") or (df["date"].max() if not df.empty else "-")
+
     mem = io.BytesIO()
     doc = SimpleDocTemplate(mem, pagesize=letter)
     styles = getSampleStyleSheet()
-    elements = [Paragraph("Expense Report", styles["Title"]), Spacer(1, 12)]
-    elements.append(Paragraph(f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Normal"]))
-    elements.append(Spacer(1, 20))
+    elements = [Paragraph("LEDGER", styles["Title"]), Paragraph("Financial Report", styles["Heading2"]),
+                Spacer(1, 6),
+                Paragraph(f"Period: {date_from} &ndash; {date_to}", styles["Normal"]),
+                Paragraph(f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Normal"]),
+                Spacer(1, 16)]
 
-    data = [["Date", "Category", "Description", "Payment", "Amount"]]
+    summary = [
+        ["Income", f"{symbol}{income_total:,.2f}"],
+        ["Expenses", f"{symbol}{expense_total:,.2f}"],
+        ["Net Cash Flow", f"{symbol}{(income_total - expense_total):,.2f}"],
+    ]
+    summary_table = Table(summary, colWidths=[2 * inch, 2 * inch])
+    summary_table.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+    ]))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph("Transaction Detail", styles["Heading3"]))
+    elements.append(Spacer(1, 8))
+
+    data = [["Date", "Type", "Category", "Description", "Amount"]]
     for _, row in df.iterrows():
         data.append([
-            str(row["date"]), str(row["category"]), str(row["description"] or "")[:30],
-            str(row["payment_mode"]), f"{row['amount']:.2f}"
+            str(row["date"]), str(row["type"]).capitalize(), str(row["category"]),
+            str(row["description"] or "")[:28], f"{row['amount']:.2f}"
         ])
-    total = df["amount"].sum() if not df.empty else 0
-    data.append(["", "", "", "Total", f"{total:.2f}"])
+    data.append(["", "", "", "Net", f"{(income_total - expense_total):.2f}"])
 
-    table = Table(data, colWidths=[1 * inch, 1.2 * inch, 2.2 * inch, 1.1 * inch, 1 * inch])
+    table = Table(data, colWidths=[0.9 * inch, 0.8 * inch, 1.1 * inch, 2.2 * inch, 1 * inch])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4F46E5")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -826,7 +905,16 @@ def export_pdf():
 @app.route("/settings")
 @login_required
 def settings():
-    return render_template("settings.html")
+    uid = session["user_id"]
+    conn = get_db_connection()
+    # The most recent login_success is this session; show the one before it.
+    rows = conn.execute(
+        "SELECT created_at FROM audit_log WHERE user_id=? AND action='login_success' "
+        "ORDER BY id DESC LIMIT 2", (uid,)
+    ).fetchall()
+    conn.close()
+    last_login = rows[1]["created_at"] if len(rows) > 1 else None
+    return render_template("settings.html", last_login=last_login)
 
 
 @app.route("/settings/profile", methods=["POST"])
@@ -1071,6 +1159,336 @@ def api_insights():
 
 
 # ---------------------------------------------------------------------------
+# Accounts & Transfers
+# ---------------------------------------------------------------------------
+@app.route("/accounts", methods=["GET", "POST"])
+@login_required
+def accounts():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        acc_type = request.form.get("type", "Other")
+        opening = request.form.get("opening_balance", "0")
+        notes = request.form.get("notes", "").strip()
+        user = conn.execute("SELECT currency FROM users WHERE id=?", (uid,)).fetchone()
+        if not name or acc_type not in services.ACCOUNT_TYPES:
+            flash("Please provide a name and a valid account type.", "error")
+        else:
+            try:
+                to_minor(opening)
+            except Exception:
+                flash("Opening balance must be a number.", "error")
+                conn.close()
+                return redirect(url_for("accounts"))
+            services.create_account(conn, uid, name, acc_type, opening, user["currency"], notes)
+            conn.commit()
+            flash("Account added.", "success")
+        return redirect(url_for("accounts"))
+
+    rows = conn.execute("SELECT * FROM accounts WHERE user_id=? AND status='active' ORDER BY created_at", (uid,)).fetchall()
+    symbol = get_user_currency_symbol(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
+    conn.close()
+    return render_template("accounts.html", accounts=rows, account_types=services.ACCOUNT_TYPES,
+                            currency_symbol=symbol, to_major=to_major)
+
+
+@app.route("/accounts/archive/<int:account_id>", methods=["POST"])
+@login_required
+def archive_account_route(account_id):
+    uid = session["user_id"]
+    conn = get_db_connection()
+    services.archive_account(conn, uid, account_id)
+    conn.commit()
+    conn.close()
+    flash("Account archived.", "success")
+    return redirect(url_for("accounts"))
+
+
+@app.route("/transfers/add", methods=["POST"])
+@login_required
+def add_transfer():
+    uid = session["user_id"]
+    from_id = request.form.get("from_account_id", type=int)
+    to_id = request.form.get("to_account_id", type=int)
+    amount = request.form.get("amount")
+    date = request.form.get("date")
+    note = request.form.get("note", "").strip()
+    conn = get_db_connection()
+    try:
+        to_minor(amount)
+        datetime.strptime(date or "", "%Y-%m-%d")
+    except Exception:
+        conn.close()
+        flash("Please provide a valid amount and date.", "error")
+        return redirect(url_for("accounts"))
+    _, err = services.create_transfer(conn, uid, from_id, to_id, amount, date, note)
+    if err:
+        flash(err, "error")
+    else:
+        conn.commit()
+        flash("Transfer completed.", "success")
+    conn.close()
+    return redirect(url_for("accounts"))
+
+
+@app.route("/net-worth")
+@login_required
+def net_worth_page():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    accts = conn.execute("SELECT * FROM accounts WHERE user_id=? AND status='active'", (uid,)).fetchall()
+    nw = services.net_worth(conn, uid)
+    today = datetime.now()
+    month_start = today.replace(day=1).strftime("%Y-%m-%d")
+    cf = services.cash_flow(conn, uid, month_start, today.strftime("%Y-%m-%d"))
+    symbol = get_user_currency_symbol(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
+    conn.close()
+    return render_template("net_worth.html", accounts=accts, nw=nw, cf=cf,
+                            currency_symbol=symbol, to_major=to_major)
+
+
+@app.route("/accounts/reconcile/<int:account_id>", methods=["GET", "POST"])
+@login_required
+def reconcile_account(account_id):
+    uid = session["user_id"]
+    conn = get_db_connection()
+    account = conn.execute("SELECT * FROM accounts WHERE id=? AND user_id=?", (account_id, uid)).fetchone()
+    if not account:
+        conn.close()
+        abort(404)
+
+    statement_balance = None
+    difference = None
+    if request.method == "POST":
+        raw = request.form.get("statement_balance", "")
+        try:
+            statement_minor = to_minor(raw)
+            statement_balance = to_major(statement_minor)
+            difference = to_major(account["balance_minor"] - statement_minor)
+            services.record_audit(conn, uid, "account_reconciled", "account", account_id,
+                                   {"statement_balance": str(statement_balance), "difference": str(difference)})
+            conn.commit()
+        except Exception:
+            flash("Please enter a valid statement balance.", "error")
+
+    symbol = get_user_currency_symbol(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
+    conn.close()
+    return render_template("reconcile.html", account=account, statement_balance=statement_balance,
+                            difference=difference, currency_symbol=symbol, to_major=to_major)
+
+
+# ---------------------------------------------------------------------------
+# Goals
+# ---------------------------------------------------------------------------
+@app.route("/goals", methods=["GET", "POST"])
+@login_required
+def goals():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        target = request.form.get("target")
+        target_date = request.form.get("target_date") or None
+        priority = request.form.get("priority", "medium")
+        try:
+            target_minor = to_minor(target)
+            if target_minor <= 0:
+                raise ValueError
+        except Exception:
+            flash("Please enter a valid target amount.", "error")
+            conn.close()
+            return redirect(url_for("goals"))
+        if not name:
+            flash("Goal name is required.", "error")
+            conn.close()
+            return redirect(url_for("goals"))
+        conn.execute(
+            "INSERT INTO goals (user_id, name, target_minor, saved_minor, target_date, priority, status, created_at) "
+            "VALUES (?, ?, ?, 0, ?, ?, 'active', ?)",
+            (uid, name, target_minor, target_date, priority, now_iso()),
+        )
+        services.record_audit(conn, uid, "goal_created", "goal", None, {"name": name})
+        conn.commit()
+        flash("Goal added.", "success")
+        return redirect(url_for("goals"))
+
+    rows = conn.execute("SELECT * FROM goals WHERE user_id=? AND status='active' ORDER BY created_at", (uid,)).fetchall()
+    today = datetime.now().date()
+    enriched = []
+    for g in rows:
+        remaining_minor = g["target_minor"] - g["saved_minor"]
+        months_left = None
+        required_monthly = None
+        if g["target_date"]:
+            try:
+                td = datetime.strptime(g["target_date"], "%Y-%m-%d").date()
+                months_left = max(1, (td.year - today.year) * 12 + (td.month - today.month))
+                required_monthly = to_major(round(max(0, remaining_minor) / months_left))
+            except ValueError:
+                pass
+        enriched.append({
+            "row": g,
+            "saved": to_major(g["saved_minor"]),
+            "target": to_major(g["target_minor"]),
+            "remaining": to_major(max(0, remaining_minor)),
+            "progress_pct": min(100, round(g["saved_minor"] / g["target_minor"] * 100)) if g["target_minor"] else 0,
+            "required_monthly": required_monthly,
+        })
+    symbol = get_user_currency_symbol(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
+    conn.close()
+    return render_template("goals.html", goals=enriched, currency_symbol=symbol)
+
+
+@app.route("/goals/contribute/<int:goal_id>", methods=["POST"])
+@login_required
+def contribute_goal(goal_id):
+    uid = session["user_id"]
+    amount = request.form.get("amount")
+    conn = get_db_connection()
+    goal = conn.execute("SELECT * FROM goals WHERE id=? AND user_id=?", (goal_id, uid)).fetchone()
+    if not goal:
+        conn.close()
+        abort(404)
+    try:
+        amount_minor = to_minor(amount)
+        if amount_minor <= 0:
+            raise ValueError
+    except Exception:
+        conn.close()
+        flash("Please enter a valid contribution amount.", "error")
+        return redirect(url_for("goals"))
+    new_saved = goal["saved_minor"] + amount_minor
+    status = "completed" if new_saved >= goal["target_minor"] else "active"
+    conn.execute("UPDATE goals SET saved_minor=?, status=? WHERE id=?", (new_saved, status, goal_id))
+    conn.execute("INSERT INTO goal_contributions (goal_id, amount_minor, date, created_at) VALUES (?, ?, ?, ?)",
+                 (goal_id, amount_minor, datetime.now().strftime("%Y-%m-%d"), now_iso()))
+    services.record_audit(conn, uid, "goal_contribution", "goal", goal_id, {"amount_minor": amount_minor})
+    conn.commit()
+    conn.close()
+    flash("Contribution recorded. Estimated completion depends on your future saving rate.", "success")
+    return redirect(url_for("goals"))
+
+
+# ---------------------------------------------------------------------------
+# Subscriptions (a filtered, calculated view over recurring expenses)
+# ---------------------------------------------------------------------------
+@app.route("/subscriptions")
+@login_required
+def subscriptions():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT * FROM recurring_expenses WHERE user_id=? AND active=1 ORDER BY next_date", (uid,)
+    ).fetchall()
+    monthly_total = 0.0
+    items = []
+    for r in rows:
+        freq = (r["frequency"] or "monthly").lower()
+        monthly_equiv = r["amount"]
+        if freq == "weekly":
+            monthly_equiv = r["amount"] * 52 / 12
+        elif freq == "yearly":
+            monthly_equiv = r["amount"] / 12
+        monthly_total += monthly_equiv
+        items.append({"row": r, "monthly_equiv": round(monthly_equiv, 2)})
+    symbol = get_user_currency_symbol(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
+    conn.close()
+    return render_template("subscriptions.html", items=items, monthly_total=round(monthly_total, 2),
+                            yearly_total=round(monthly_total * 12, 2), currency_symbol=symbol)
+
+
+# ---------------------------------------------------------------------------
+# Data Quality Center
+# ---------------------------------------------------------------------------
+@app.route("/data-quality")
+@login_required
+def data_quality():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    uncategorized = conn.execute(
+        "SELECT * FROM expenses WHERE user_id=? AND (category IS NULL OR category='') ORDER BY date DESC", (uid,)
+    ).fetchall()
+    no_account = conn.execute(
+        "SELECT * FROM expenses WHERE user_id=? AND account_id IS NULL ORDER BY date DESC LIMIT 50", (uid,)
+    ).fetchall()
+    all_expenses = conn.execute("SELECT * FROM expenses WHERE user_id=? ORDER BY date", (uid,)).fetchall()
+    seen = {}
+    duplicates = []
+    for e in all_expenses:
+        key = (e["amount_minor"], e["category"], e["date"])
+        if key in seen:
+            duplicates.append(e)
+        else:
+            seen[key] = e["id"]
+    conn.close()
+    return render_template("data_quality.html", uncategorized=uncategorized,
+                            no_account=no_account, duplicates=duplicates)
+
+
+# ---------------------------------------------------------------------------
+# Audit log
+# ---------------------------------------------------------------------------
+@app.route("/audit-log")
+@login_required
+def audit_log_page():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT * FROM audit_log WHERE user_id=? ORDER BY id DESC LIMIT 200", (uid,)
+    ).fetchall()
+    conn.close()
+    return render_template("audit_log.html", entries=rows)
+
+
+# ---------------------------------------------------------------------------
+# API v1 - read-only, authenticated, user-scoped
+# ---------------------------------------------------------------------------
+def api_error(message, status=400):
+    return jsonify({"error": message}), status
+
+
+@app.route("/api/v1/accounts")
+@login_required
+def api_v1_accounts():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    rows = conn.execute("SELECT * FROM accounts WHERE user_id=? AND status='active'", (uid,)).fetchall()
+    conn.close()
+    return jsonify([{
+        "id": r["id"], "name": r["name"], "type": r["type"],
+        "balance": str(to_major(r["balance_minor"])), "currency": r["currency"],
+        "is_liability": bool(r["is_liability"]),
+    } for r in rows])
+
+
+@app.route("/api/v1/net-worth")
+@login_required
+def api_v1_net_worth():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    nw = services.net_worth(conn, uid)
+    conn.close()
+    return jsonify({k: str(to_major(v)) for k, v in nw.items()})
+
+
+@app.route("/api/v1/transactions")
+@login_required
+def api_v1_transactions():
+    uid = session["user_id"]
+    limit = min(request.args.get("limit", 50, type=int) or 50, 200)
+    offset = max(request.args.get("offset", 0, type=int) or 0, 0)
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT id, category, amount, date, payment_mode, description FROM expenses "
+        "WHERE user_id=? ORDER BY date DESC, id DESC LIMIT ? OFFSET ?",
+        (uid, limit, offset),
+    ).fetchall()
+    conn.close()
+    return jsonify({"transactions": [dict(r) for r in rows], "limit": limit, "offset": offset})
+
+
+# ---------------------------------------------------------------------------
 # Receipts (authenticated, never public)
 # ---------------------------------------------------------------------------
 def resolve_receipt_path(stored):
@@ -1163,7 +1581,9 @@ def server_error(e):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     init_db()
+    backfill_minor_units()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=DEBUG)
 else:
     init_db()
+    backfill_minor_units()

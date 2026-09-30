@@ -5,6 +5,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}Ledger — Expense Tracker{% endblock %}</title>
+<link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="{{ url_for('static', filename='img/icon-192.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='img/icon-192.png') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
@@ -23,8 +27,8 @@
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       {% for category, message in messages %}
-        <div class="toast {{ 'success' if category == 'success' else 'error' }}">
-          <i class="fa-solid {{ 'fa-circle-check' if category == 'success' else 'fa-circle-exclamation' }}"></i>
+        <div class="toast {{ 'success' if category == 'success' else ('warning' if category == 'warning' else 'error') }}">
+          <i class="fa-solid {{ 'fa-circle-check' if category == 'success' else ('fa-triangle-exclamation' if category == 'warning' else 'fa-circle-exclamation') }}"></i>
           <span class="msg">{{ message }}</span>
           <button class="close-toast" aria-label="Dismiss"><i class="fa-solid fa-xmark"></i></button>
         </div>
@@ -47,7 +51,15 @@
       <div class="nav-label">Money</div>
       <a href="{{ url_for('expenses') }}" class="{{ 'active' if request.endpoint in ['expenses','add_expense','edit_expense'] }}"><i class="fa-solid fa-arrow-trend-down"></i> Expenses</a>
       <a href="{{ url_for('income') }}" class="{{ 'active' if request.endpoint in ['income','add_income','edit_income'] }}"><i class="fa-solid fa-arrow-trend-up"></i> Income</a>
-      <a href="{{ url_for('budget') }}" class="{{ 'active' if request.endpoint == 'budget' }}"><i class="fa-solid fa-piggy-bank"></i> Budget &amp; Goals</a>
+      <a href="{{ url_for('budget') }}" class="{{ 'active' if request.endpoint == 'budget' }}"><i class="fa-solid fa-piggy-bank"></i> Budget</a>
+      <a href="{{ url_for('goals') }}" class="{{ 'active' if request.endpoint == 'goals' }}"><i class="fa-solid fa-bullseye"></i> Goals</a>
+      <a href="{{ url_for('accounts') }}" class="{{ 'active' if request.endpoint == 'accounts' }}"><i class="fa-solid fa-building-columns"></i> Accounts &amp; Transfers</a>
+      <a href="{{ url_for('net_worth_page') }}" class="{{ 'active' if request.endpoint == 'net_worth_page' }}"><i class="fa-solid fa-scale-balanced"></i> Net Worth</a>
+      <a href="{{ url_for('subscriptions') }}" class="{{ 'active' if request.endpoint == 'subscriptions' }}"><i class="fa-solid fa-rotate"></i> Subscriptions</a>
+
+      <div class="nav-label">Data</div>
+      <a href="{{ url_for('data_quality') }}" class="{{ 'active' if request.endpoint == 'data_quality' }}"><i class="fa-solid fa-broom"></i> Data Quality</a>
+      <a href="{{ url_for('audit_log_page') }}" class="{{ 'active' if request.endpoint == 'audit_log_page' }}"><i class="fa-solid fa-clock-rotate-left"></i> Audit Log</a>
 
       <div class="nav-label">Account</div>
       <a href="{{ url_for('profile') }}" class="{{ 'active' if request.endpoint == 'profile' }}"><i class="fa-solid fa-user"></i> Profile</a>
@@ -99,6 +111,18 @@
 <a href="{{ url_for('add_expense') }}" class="fab" title="Add expense"><i class="fa-solid fa-plus"></i></a>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<script>
+  window.LEDGER_ROUTES = {
+    add_expense: "{{ url_for('add_expense') }}",
+    add_income: "{{ url_for('add_income') }}",
+    accounts: "{{ url_for('accounts') }}",
+    budget: "{{ url_for('budget') }}",
+    goals: "{{ url_for('goals') }}",
+    reports: "{{ url_for('reports') }}",
+    net_worth: "{{ url_for('net_worth_page') }}",
+    subscriptions: "{{ url_for('subscriptions') }}",
+  };
+</script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
 {% block extra_scripts %}{% endblock %}

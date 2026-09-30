@@ -5,6 +5,45 @@
 
 {% block content %}
 <div class="grid grid-4">
+  <div class="stat-card tone-ink">
+    <div class="stat-top">
+      <div><div class="stat-label">Net Worth</div></div>
+      <div class="stat-icon"><i class="fa-solid fa-scale-balanced"></i></div>
+    </div>
+    <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(net_worth) }}</div>
+    <div class="stat-delta" style="color:var(--text-muted)">Assets {{ currency_symbol }}{{ '%.2f'|format(assets_total) }} &minus; Liabilities {{ currency_symbol }}{{ '%.2f'|format(liabilities_total) }}</div>
+  </div>
+  <div class="stat-card tone-green">
+    <div class="stat-top">
+      <div><div class="stat-label">Cash Flow (this month)</div></div>
+      <div class="stat-icon"><i class="fa-solid fa-right-left"></i></div>
+    </div>
+    <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(cash_flow_month) }}</div>
+    <div class="stat-delta" style="color:var(--text-muted)">Income minus expenses, this month</div>
+  </div>
+  <div class="stat-card tone-gold">
+    <div class="stat-top">
+      <div><div class="stat-label">Savings Rate</div></div>
+      <div class="stat-icon"><i class="fa-solid fa-percent"></i></div>
+    </div>
+    <div class="stat-value mono">{{ savings_rate }}%</div>
+    <div class="stat-delta" style="color:var(--text-muted)">All-time income saved, not spent</div>
+  </div>
+  <div class="stat-card tone-red">
+    <div class="stat-top">
+      <div><div class="stat-label">Quick Links</div></div>
+      <div class="stat-icon"><i class="fa-solid fa-bolt"></i></div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+      <a href="{{ url_for('accounts') }}" class="chip chip-gray">Accounts</a>
+      <a href="{{ url_for('goals') }}" class="chip chip-gray">Goals</a>
+      <a href="{{ url_for('subscriptions') }}" class="chip chip-gray">Subscriptions</a>
+      <a href="{{ url_for('data_quality') }}" class="chip chip-gray">Data Quality</a>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-4">
   <div class="stat-card tone-green">
     <div class="stat-top">
       <div><div class="stat-label">Total Income</div></div>

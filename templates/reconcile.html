@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Reconcile — Ledger{% endblock %}
+{% block page_title %}Reconcile {{ account['name'] }}{% endblock %}
+{% block page_subtitle %}Compare your bank statement against your Ledger balance{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width:480px;">
+  <div class="panel-head"><h3>Current Ledger balance</h3></div>
+  <p class="stat-value mono" style="margin-bottom:16px;">{{ currency_symbol }}{{ '%.2f'|format(to_major(account['balance_minor'])) }}</p>
+
+  <form method="POST" action="{{ url_for('reconcile_account', account_id=account['id']) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label for="statement_balance">Bank statement balance</label>
+      <input type="number" id="statement_balance" name="statement_balance" step="0.01" required>
+    </div>
+    <button type="submit" class="btn btn-accent">Compare</button>
+  </form>
+
+  {% if statement_balance is not none %}
+    <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+      <table class="table">
+        <tbody>
+          <tr><td>Bank Statement Balance</td><td class="mono">{{ currency_symbol }}{{ '%.2f'|format(statement_balance) }}</td></tr>
+          <tr><td>Ledger Balance</td><td class="mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(account['balance_minor'])) }}</td></tr>
+          <tr style="font-weight:600;"><td>Difference</td><td class="mono" style="color: {{ 'var(--ledger-red)' if difference != 0 else 'var(--ledger-green)' }}">{{ currency_symbol }}{{ '%.2f'|format(difference) }}</td></tr>
+        </tbody>
+      </table>
+      {% if difference != 0 %}
+        <p style="font-size:12.5px;color:var(--text-muted);margin-top:10px;">This does not change any records. Review your transactions for the unmatched amount before making any changes.</p>
+      {% else %}
+        <p style="font-size:12.5px;color:var(--ledger-green);margin-top:10px;">Balances match.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

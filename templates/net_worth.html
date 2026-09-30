@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Net Worth — Ledger{% endblock %}
+{% block page_title %}Net Worth &amp; Cash Flow{% endblock %}
+{% block page_subtitle %}What you own, what you owe, and where cash moved this month{% endblock %}
+
+{% block content %}
+<div class="grid grid-3">
+  <div class="stat-card tone-ink">
+    <div class="stat-label">Assets</div>
+    <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(nw['assets_minor'])) }}</div>
+  </div>
+  <div class="stat-card tone-red">
+    <div class="stat-label">Liabilities</div>
+    <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(nw['liabilities_minor'])) }}</div>
+  </div>
+  <div class="stat-card tone-green">
+    <div class="stat-label">Net Worth</div>
+    <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(nw['net_worth_minor'])) }}</div>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <div class="panel-head"><h3>Cash flow — this month</h3></div>
+  <table class="table">
+    <tbody>
+      <tr><td>Opening balance</td><td class="mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(cf['opening_minor'])) }}</td></tr>
+      <tr><td>+ Income</td><td class="mono" style="color:var(--ledger-green)">{{ currency_symbol }}{{ '%.2f'|format(to_major(cf['income_minor'])) }}</td></tr>
+      <tr><td>&minus; Expenses</td><td class="mono" style="color:var(--ledger-red)">{{ currency_symbol }}{{ '%.2f'|format(to_major(cf['expenses_minor'])) }}</td></tr>
+      <tr style="font-weight:600;"><td>= Closing balance</td><td class="mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(cf['closing_minor'])) }}</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:12px;color:var(--text-muted);margin-top:10px;">Calculated from your accounts' opening balances plus all recorded income and expenses. Transfers between your own accounts do not affect this.</p>
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <div class="panel-head"><h3>Accounts</h3></div>
+  {% if accounts %}
+    <table class="table">
+      <thead><tr><th>Account</th><th>Type</th><th>Balance</th></tr></thead>
+      <tbody>
+      {% for a in accounts %}
+        <tr>
+          <td>{{ a['name'] }}</td>
+          <td><span class="chip chip-gray">{{ a['type'] }}</span></td>
+          <td class="mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(a['balance_minor'])) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:var(--text-muted);font-size:13px;">No accounts yet. <a href="{{ url_for('accounts') }}">Add one</a> to see your net worth.</p>
+  {% endif %}
+</div>
+{% endblock %}
