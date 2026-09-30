@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Split Expense — Ledger{% endblock %}
+{% block page_title %}Split Expense{% endblock %}
+{% block page_subtitle %}One payment, multiple categories{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width:640px;">
+  <form method="POST" action="{{ url_for('add_split') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field-row">
+      <div class="field">
+        <label for="merchant">Merchant</label>
+        <input type="text" id="merchant" name="merchant" maxlength="80" placeholder="e.g. Amazon">
+      </div>
+      <div class="field">
+        <label for="date">Date</label>
+        <input type="date" id="date" name="date" required>
+      </div>
+    </div>
+    <div class="field">
+      <label for="description">Description (optional)</label>
+      <input type="text" id="description" name="description" maxlength="200">
+    </div>
+    <div class="field">
+      <label for="payment_mode">Payment mode</label>
+      <select id="payment_mode" name="payment_mode">
+        {% for p in payment_modes %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+    </div>
+
+    <div class="panel-head" style="margin-top:16px;"><h3>Categories</h3></div>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Add at least two lines. The amounts don't need to sum to anything in particular here — Ledger just records each line as its own expense in the same split group.</p>
+    {% for i in range(5) %}
+    <div class="field-row">
+      <div class="field">
+        <label for="cat{{ i }}">Category</label>
+        <select id="cat{{ i }}" name="split_category[]">
+          <option value="">— not used —</option>
+          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="amt{{ i }}">Amount</label>
+        <input type="number" id="amt{{ i }}" name="split_amount[]" step="0.01" min="0.01">
+      </div>
+    </div>
+    {% endfor %}
+
+    <button type="submit" class="btn btn-accent" style="margin-top:12px;">Add Split Expense</button>
+  </form>
+</div>
+{% endblock %}

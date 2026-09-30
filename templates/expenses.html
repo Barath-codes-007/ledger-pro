@@ -24,6 +24,8 @@
     <button type="submit" class="btn btn-outline btn-sm"><i class="fa-solid fa-filter"></i> Filter</button>
   </form>
   <a href="{{ url_for('add_expense') }}" class="btn btn-accent"><i class="fa-solid fa-plus"></i> Add Expense</a>
+  <a href="{{ url_for('add_split') }}" class="chip chip-gray"><i class="fa-solid fa-layer-group"></i> Split</a>
+  <a href="{{ url_for('add_adjustment') }}" class="chip chip-gray"><i class="fa-solid fa-pen"></i> Adjustment</a>
 </div>
 
 <div class="table-wrap">
@@ -52,18 +54,34 @@
             <a href="{{ url_for('receipt', expense_id=e['id']) }}" target="_blank" class="chip chip-gray"><i class="fa-solid fa-paperclip"></i> View</a>
           {% else %}—{% endif %}
         </td>
-        <td class="mono" style="color:var(--ledger-red); font-weight:600;">
-          -{{ currency_symbol }}{{ '%.2f'|format(e['amount']) }}
+        <td class="mono" style="color: {{ 'var(--ledger-green)' if e['amount'] < 0 else 'var(--ledger-red)' }}; font-weight:600;">
+          {{ '+' if e['amount'] < 0 else '-' }}{{ currency_symbol }}{{ '%.2f'|format(e['amount']|abs) }}
           {% if e['currency'] and e['currency'] != user_currency %}<span class="chip chip-gray" style="font-size:10px;margin-left:4px;">{{ e['currency'] }}</span>{% endif %}
+          {% if e['txn_type'] and e['txn_type'] != 'expense' %}<span class="chip chip-gray" style="font-size:10px;margin-left:4px;">{{ e['txn_type']|replace('_',' ')|capitalize }}</span>{% endif %}
         </td>
         <td>
           <div class="row-actions">
             <a href="{{ url_for('edit_expense', expense_id=e['id']) }}" title="Edit"><i class="fa-solid fa-pen"></i></a>
+            {% if e['txn_type'] == 'expense' and not e['reversed_by_id'] %}
+            <form method="POST" action="{{ url_for('reverse_expense', expense_id=e['id']) }}" data-confirm="Reverse this transaction? The original stays in your history and a balancing entry is added." style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" title="Reverse"><i class="fa-solid fa-rotate-left"></i></button>
+            </form>
+            <button type="button" class="refund-toggle" data-id="{{ e['id'] }}" title="Refund"><i class="fa-solid fa-hand-holding-dollar"></i></button>
+            {% endif %}
             <form method="POST" action="{{ url_for('delete_expense', expense_id=e['id']) }}" data-confirm="Delete this expense?">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" title="Delete"><i class="fa-solid fa-trash"></i></button>
             </form>
           </div>
+          {% if e['txn_type'] == 'expense' %}
+          <form method="POST" action="{{ url_for('refund_expense', expense_id=e['id']) }}" id="refund-form-{{ e['id'] }}" style="display:none;margin-top:6px;gap:6px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="number" name="amount" step="0.01" min="0.01" max="{{ e['amount'] }}" placeholder="Refund amount" style="width:110px;" required>
+            <input type="date" name="date" value="{{ e['date'] }}" style="width:130px;">
+            <button type="submit" class="chip chip-gray" style="border:0;cursor:pointer;">Confirm</button>
+          </form>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -78,4 +96,15 @@
   </div>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.querySelectorAll('.refund-toggle').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var form = document.getElementById('refund-form-' + btn.dataset.id);
+    if (form) form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+  });
+});
+</script>
 {% endblock %}

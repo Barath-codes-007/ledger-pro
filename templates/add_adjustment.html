@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Adjustment — Ledger{% endblock %}
+{% block page_title %}Manual Adjustment{% endblock %}
+{% block page_subtitle %}Correct a balance directly, with a reason on record{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width:480px;">
+  <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:14px;">Use a positive amount to record additional expense, or a negative amount to reduce it. This is logged in your audit trail like any other change.</p>
+  <form method="POST" action="{{ url_for('add_adjustment') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label for="category">Category</label>
+      <select id="category" name="category">
+        {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        <option value="Adjustment" selected>Adjustment</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="amount">Amount (use a minus sign to reduce)</label>
+      <input type="number" id="amount" name="amount" step="0.01" required placeholder="e.g. -150 or 150">
+    </div>
+    <div class="field">
+      <label for="date">Date</label>
+      <input type="date" id="date" name="date" required>
+    </div>
+    <div class="field">
+      <label for="description">Reason</label>
+      <textarea id="description" name="description" rows="2" placeholder="Why this adjustment is needed" required></textarea>
+    </div>
+    <button type="submit" class="btn btn-accent">Record Adjustment</button>
+  </form>
+</div>
+{% endblock %}

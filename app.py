@@ -532,6 +532,112 @@ def delete_expense(expense_id):
     return redirect(url_for("expenses"))
 
 
+@app.route("/expenses/refund/<int:expense_id>", methods=["POST"])
+@login_required
+def refund_expense(expense_id):
+    uid = session["user_id"]
+    amount = request.form.get("amount")
+    date = request.form.get("date") or datetime.now().strftime("%Y-%m-%d")
+    conn = get_db_connection()
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        conn.close()
+        flash("Please enter a valid date.", "error")
+        return redirect(url_for("expenses"))
+    _, err = services.create_refund(conn, uid, expense_id, amount, date)
+    if err:
+        flash(err, "error")
+    else:
+        conn.commit()
+        flash("Refund recorded.", "success")
+    conn.close()
+    return redirect(url_for("expenses"))
+
+
+@app.route("/expenses/reverse/<int:expense_id>", methods=["POST"])
+@login_required
+def reverse_expense(expense_id):
+    uid = session["user_id"]
+    conn = get_db_connection()
+    _, err = services.create_reversal(conn, uid, expense_id)
+    if err:
+        flash(err, "error")
+    else:
+        conn.commit()
+        flash("Transaction reversed. The original stays in your history.", "success")
+    conn.close()
+    return redirect(url_for("expenses"))
+
+
+@app.route("/expenses/split/add", methods=["GET", "POST"])
+@login_required
+def add_split():
+    uid = session["user_id"]
+    if request.method == "POST":
+        merchant = request.form.get("merchant", "").strip()
+        date = request.form.get("date")
+        payment_mode = request.form.get("payment_mode", "Cash")
+        description = request.form.get("description", "").strip()
+        categories = request.form.getlist("split_category[]")
+        amounts = request.form.getlist("split_amount[]")
+
+        conn = get_db_connection()
+        user = conn.execute("SELECT currency FROM users WHERE id=?", (uid,)).fetchone()
+        try:
+            datetime.strptime(date or "", "%Y-%m-%d")
+        except ValueError:
+            conn.close()
+            flash("Please enter a valid date.", "error")
+            return redirect(url_for("add_split"))
+
+        parts = [(c.strip(), a) for c, a in zip(categories, amounts) if c.strip() and a.strip()]
+        result, err = services.create_split(conn, uid, merchant, date, payment_mode,
+                                             user["currency"] if user else DEFAULT_CURRENCY,
+                                             parts, description)
+        if err:
+            conn.close()
+            flash(err, "error")
+            return redirect(url_for("add_split"))
+        conn.commit()
+        conn.close()
+        flash(f"Split expense added across {len(parts)} categories.", "success")
+        return redirect(url_for("expenses"))
+
+    return render_template("add_split.html", categories=list(CATEGORY_ICONS.keys()))
+
+
+@app.route("/adjustments/add", methods=["GET", "POST"])
+@login_required
+def add_adjustment():
+    uid = session["user_id"]
+    if request.method == "POST":
+        category = request.form.get("category", "Adjustment").strip() or "Adjustment"
+        amount = request.form.get("amount")
+        date = request.form.get("date")
+        description = request.form.get("description", "").strip()
+        conn = get_db_connection()
+        user = conn.execute("SELECT currency FROM users WHERE id=?", (uid,)).fetchone()
+        try:
+            datetime.strptime(date or "", "%Y-%m-%d")
+        except ValueError:
+            conn.close()
+            flash("Please enter a valid date.", "error")
+            return redirect(url_for("add_adjustment"))
+        _, err = services.create_adjustment(conn, uid, category, amount, date,
+                                             user["currency"] if user else DEFAULT_CURRENCY, description)
+        if err:
+            conn.close()
+            flash(err, "error")
+            return redirect(url_for("add_adjustment"))
+        conn.commit()
+        conn.close()
+        flash("Adjustment recorded.", "success")
+        return redirect(url_for("expenses"))
+
+    return render_template("add_adjustment.html", categories=list(CATEGORY_ICONS.keys()))
+
+
 # ---------------------------------------------------------------------------
 # Income
 # ---------------------------------------------------------------------------
