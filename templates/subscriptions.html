@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Subscriptions — Ledger{% endblock %}
+{% block page_title %}Subscriptions{% endblock %}
+{% block page_subtitle %}Recurring payments, tracked in one place{% endblock %}
+
+{% block content %}
+<div class="grid grid-2">
+  <div class="stat-card tone-ink">
+    <div class="stat-label">Monthly cost</div>
+    <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(monthly_total) }}</div>
+  </div>
+  <div class="stat-card tone-gold">
+    <div class="stat-label">Estimated yearly cost</div>
+    <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(yearly_total) }}</div>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <div class="panel-head"><h3>Active recurring payments</h3></div>
+  {% if items %}
+    <table class="table">
+      <thead><tr><th>Name</th><th>Category</th><th>Billing cycle</th><th>Amount</th><th>Monthly equivalent</th><th>Next date</th></tr></thead>
+      <tbody>
+      {% for it in items %}
+        <tr>
+          <td>{{ it.row['description'] or it.row['category'] }}</td>
+          <td>{{ it.row['category'] }}</td>
+          <td>{{ it.row['frequency']|capitalize }}</td>
+          <td class="mono">{{ currency_symbol }}{{ '%.2f'|format(it.row['amount']) }}</td>
+          <td class="mono">{{ currency_symbol }}{{ '%.2f'|format(it.monthly_equiv) }}</td>
+          <td>{{ it.row['next_date'] }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:var(--text-muted);font-size:13px;">No recurring payments yet. Add one from the Budget page to see it tracked here.</p>
+  {% endif %}
+</div>
+{% endblock %}

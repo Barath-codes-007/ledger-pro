@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Data Quality — Ledger{% endblock %}
+{% block page_title %}Data Quality Center{% endblock %}
+{% block page_subtitle %}Spot gaps and possible duplicates in your records{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="panel-head"><h3>Uncategorized expenses ({{ uncategorized|length }})</h3></div>
+  {% if uncategorized %}
+    <table class="table">
+      <thead><tr><th>Date</th><th>Amount</th><th>Description</th></tr></thead>
+      <tbody>
+      {% for e in uncategorized %}
+        <tr><td>{{ e['date'] }}</td><td class="mono">{{ '%.2f'|format(e['amount']) }}</td><td>{{ e['description'] }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:var(--text-muted);font-size:13px;">Nothing to review — every expense has a category.</p>
+  {% endif %}
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <div class="panel-head"><h3>Possible duplicates ({{ duplicates|length }})</h3></div>
+  {% if duplicates %}
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Same amount, category and date as another entry. Review before assuming either is wrong — nothing here is deleted automatically.</p>
+    <table class="table">
+      <thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Description</th></tr></thead>
+      <tbody>
+      {% for e in duplicates %}
+        <tr>
+          <td>{{ e['date'] }}</td><td>{{ e['category'] }}</td><td class="mono">{{ '%.2f'|format(e['amount']) }}</td>
+          <td>{{ e['description'] }} &middot; <a href="{{ url_for('edit_expense', expense_id=e['id']) }}">Review</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:var(--text-muted);font-size:13px;">No likely duplicates found.</p>
+  {% endif %}
+</div>
+{% endblock %}

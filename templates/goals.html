@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Goals — Ledger{% endblock %}
+{% block page_title %}Savings Goals{% endblock %}
+{% block page_subtitle %}Save toward what matters, one contribution at a time{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid">
+  <div>
+    {% if goals %}
+      {% for g in goals %}
+        <div class="panel" style="margin-bottom:16px;">
+          <div class="panel-head"><h3>{{ g.row['name'] }}</h3></div>
+          <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--text-muted); margin-bottom:8px;">
+            <span>{{ currency_symbol }}{{ '%.2f'|format(g.saved) }} of {{ currency_symbol }}{{ '%.2f'|format(g.target) }}</span>
+            <span>{{ g.progress_pct }}%</span>
+          </div>
+          <div class="progress-track" style="height:12px;">
+            <div class="progress-fill" style="width:{{ g.progress_pct }}%;"></div>
+          </div>
+          <p style="font-size:12.5px; color:var(--text-muted); margin-top:8px;">
+            Remaining: {{ currency_symbol }}{{ '%.2f'|format(g.remaining) }}
+            {% if g.row['target_date'] %} &middot; Target date: {{ g.row['target_date'] }}{% endif %}
+            {% if g.required_monthly %} &middot; Estimated required saving: {{ currency_symbol }}{{ '%.2f'|format(g.required_monthly) }}/month{% endif %}
+          </p>
+          <form method="POST" action="{{ url_for('contribute_goal', goal_id=g.row['id']) }}" style="margin-top:12px;display:flex;gap:8px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="number" name="amount" step="0.01" min="0.01" placeholder="Add contribution" required style="max-width:180px;">
+            <button type="submit" class="btn btn-accent">Contribute</button>
+          </form>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="panel"><p style="color:var(--text-muted);font-size:13px;">No goals yet. Add your first goal to start saving toward it.</p></div>
+    {% endif %}
+  </div>
+
+  <div>
+    <div class="panel">
+      <div class="panel-head"><h3>Add a goal</h3></div>
+      <form method="POST" action="{{ url_for('goals') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field">
+          <label for="name">Goal name</label>
+          <input type="text" id="name" name="name" maxlength="80" required>
+        </div>
+        <div class="field">
+          <label for="target">Target amount</label>
+          <input type="number" id="target" name="target" step="0.01" min="0.01" required>
+        </div>
+        <div class="field">
+          <label for="target_date">Target date (optional)</label>
+          <input type="date" id="target_date" name="target_date">
+        </div>
+        <div class="field">
+          <label for="priority">Priority</label>
+          <select id="priority" name="priority">
+            <option value="high">High</option>
+            <option value="medium" selected>Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-accent">Add Goal</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

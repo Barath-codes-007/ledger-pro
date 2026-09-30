@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Audit Log — Ledger{% endblock %}
+{% block page_title %}Audit Log{% endblock %}
+{% block page_subtitle %}A record of changes to your account and data{% endblock %}
+
+{% block content %}
+<div class="panel">
+  {% if entries %}
+    <table class="table">
+      <thead><tr><th>When</th><th>Action</th><th>Details</th></tr></thead>
+      <tbody>
+      {% for e in entries %}
+        <tr>
+          <td class="mono" style="white-space:nowrap;">{{ e['created_at'] }}</td>
+          <td>{{ e['action']|replace('_', ' ')|capitalize }}</td>
+          <td style="font-size:12.5px;color:var(--text-muted);">{{ e['details'] or '' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:var(--text-muted);font-size:13px;">No activity recorded yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
