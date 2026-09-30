@@ -18,6 +18,7 @@ def get_db_connection():
     conn = sqlite3.connect(os.environ.get("LEDGER_DB_PATH", DB_PATH))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
     return conn
 
 
@@ -111,6 +112,123 @@ def init_db():
         )
     """)
 
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            currency TEXT DEFAULT 'INR',
+            opening_balance_minor INTEGER NOT NULL DEFAULT 0,
+            balance_minor INTEGER NOT NULL DEFAULT 0,
+            is_liability INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'active',
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS transfers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            from_account_id INTEGER,
+            to_account_id INTEGER,
+            amount_minor INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+            FOREIGN KEY (from_account_id) REFERENCES accounts (id) ON DELETE SET NULL,
+            FOREIGN KEY (to_account_id) REFERENCES accounts (id) ON DELETE SET NULL
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id INTEGER,
+            details TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            target_minor INTEGER NOT NULL,
+            saved_minor INTEGER NOT NULL DEFAULT 0,
+            target_date TEXT,
+            priority TEXT DEFAULT 'medium',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS goal_contributions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            goal_id INTEGER NOT NULL,
+            amount_minor INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (goal_id) REFERENCES goals (id) ON DELETE CASCADE
+        )
+    """)
+
+    # Indexes that matter once data volume grows.
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_income_user_date ON income(user_id, date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transfers_user_date ON transfers(user_id, date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_user_date ON audit_log(user_id, created_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id)")
+
+    # --- Lightweight migrations for columns added after initial release ---
+    def _cols(table):
+        return {r["name"] for r in cur.execute(f"PRAGMA table_info({table})").fetchall()}
+
+    if "amount_minor" not in _cols("expenses"):
+        cur.execute("ALTER TABLE expenses ADD COLUMN amount_minor INTEGER")
+    if "account_id" not in _cols("expenses"):
+        cur.execute("ALTER TABLE expenses ADD COLUMN account_id INTEGER")
+    if "is_deleted" not in _cols("expenses"):
+        cur.execute("ALTER TABLE expenses ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
+    if "parent_expense_id" not in _cols("expenses"):
+        cur.execute("ALTER TABLE expenses ADD COLUMN parent_expense_id INTEGER")
+    if "amount_minor" not in _cols("income"):
+        cur.execute("ALTER TABLE income ADD COLUMN amount_minor INTEGER")
+    if "account_id" not in _cols("income"):
+        cur.execute("ALTER TABLE income ADD COLUMN account_id INTEGER")
+    if "is_deleted" not in _cols("income"):
+        cur.execute("ALTER TABLE income ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
+
+    conn.commit()
+    conn.close()
+
+
+def backfill_minor_units():
+    """
+    One-time, idempotent migration: populate amount_minor (integer paise) from
+    the existing REAL amount columns. Safe to call on every startup - it only
+    fills rows where amount_minor is still NULL, and never touches `amount`.
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+    conn = get_db_connection()
+    for table in ("expenses", "income"):
+        rows = conn.execute(f"SELECT id, amount FROM {table} WHERE amount_minor IS NULL").fetchall()
+        for r in rows:
+            minor = int((Decimal(str(r["amount"])) * 100).quantize(0, rounding=ROUND_HALF_UP))
+            conn.execute(f"UPDATE {table} SET amount_minor = ? WHERE id = ?", (minor, r["id"]))
     conn.commit()
     conn.close()
 
