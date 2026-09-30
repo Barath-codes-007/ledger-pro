@@ -25,6 +25,7 @@ import pandas as pd
 from database import get_db_connection, init_db, now_iso, backfill_minor_units
 import security
 import services
+import repositories
 from money import to_minor, to_major, format_amount
 
 # ---------------------------------------------------------------------------
@@ -56,6 +57,7 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=14),
 )
 login_limiter = security.LoginRateLimiter()
+api_limiter = security.ApiRateLimiter()
 DEFAULT_CURRENCY = "INR"
 
 CATEGORY_ICONS = {
@@ -1587,28 +1589,213 @@ def audit_log_page():
 
 
 # ---------------------------------------------------------------------------
-# API v1 - read-only, authenticated, user-scoped
+# API v1 - authenticated, user-scoped, rate-limited, paginated
 # ---------------------------------------------------------------------------
-def api_error(message, status=400):
-    return jsonify({"error": message}), status
+def api_error(message, status=400, code=None):
+    return jsonify({"error": {"code": code or status, "message": message}}), status
 
 
-@app.route("/api/v1/accounts")
+def api_rate_limited(f):
+    from functools import wraps
+
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        key = session.get("user_id", client_ip())
+        if not api_limiter.allow(key):
+            return api_error("Rate limit exceeded. Please slow down.", 429, "rate_limited")
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def paginate_args():
+    limit = min(max(request.args.get("limit", 50, type=int) or 50, 1), 100)
+    offset = max(request.args.get("offset", 0, type=int) or 0, 0)
+    return limit, offset
+
+
+def expense_to_json(r):
+    return {
+        "id": r["id"], "category": r["category"], "amount": r["amount"],
+        "currency": r["currency"], "date": r["date"], "payment_mode": r["payment_mode"],
+        "description": r["description"], "merchant": r["merchant"], "txn_type": r["txn_type"],
+    }
+
+
+@app.route("/api/v1/expenses", methods=["GET", "POST"])
 @login_required
+@api_rate_limited
+def api_v1_expenses():
+    uid = session["user_id"]
+    repo = repositories.ExpenseRepository()
+    try:
+        if request.method == "POST":
+            body = request.get_json(silent=True) or {}
+            category = body.get("category")
+            amount = body.get("amount")
+            date = body.get("date")
+            if not category or amount is None or not date:
+                return api_error("category, amount and date are required.", 422, "validation_error")
+            try:
+                amount_minor = to_minor(amount)
+                if amount_minor <= 0:
+                    raise ValueError
+                datetime.strptime(date, "%Y-%m-%d")
+            except (ValueError, TypeError):
+                return api_error("amount must be positive and date must be YYYY-MM-DD.", 422, "validation_error")
+            user = repo.conn.execute("SELECT currency FROM users WHERE id=?", (uid,)).fetchone()
+            new_id = repo.create(
+                uid, category=category, custom_category=body.get("custom_category"),
+                icon=CATEGORY_ICONS.get(category, "fa-receipt"), amount=float(to_major(amount_minor)),
+                amount_minor=amount_minor, description=body.get("description", ""), date=date,
+                payment_mode=body.get("payment_mode", "Cash"), currency=user["currency"],
+                merchant=body.get("merchant"), txn_type="expense",
+            )
+            services.record_audit(repo.conn, uid, "expense_created", "expense", new_id, {"via": "api"})
+            repo.conn.commit()
+            row = repo.get(new_id, uid)
+            return jsonify(expense_to_json(row)), 201
+
+        limit, offset = paginate_args()
+        rows = repo.list(uid, limit=limit, offset=offset, category=request.args.get("category"),
+                          date_from=request.args.get("date_from"), date_to=request.args.get("date_to"))
+        total = repo.count(uid, category=request.args.get("category"),
+                            date_from=request.args.get("date_from"), date_to=request.args.get("date_to"))
+        return jsonify({"data": [expense_to_json(r) for r in rows], "limit": limit, "offset": offset, "total": total})
+    finally:
+        repo.close()
+
+
+@app.route("/api/v1/expenses/<int:expense_id>", methods=["GET", "PUT", "DELETE"])
+@login_required
+@api_rate_limited
+def api_v1_expense_detail(expense_id):
+    uid = session["user_id"]
+    repo = repositories.ExpenseRepository()
+    try:
+        row = repo.get(expense_id, uid)
+        if not row:
+            return api_error("Expense not found.", 404, "not_found")
+
+        if request.method == "GET":
+            return jsonify(expense_to_json(row))
+
+        if request.method == "DELETE":
+            repo.hard_delete(expense_id, uid)
+            services.record_audit(repo.conn, uid, "expense_deleted", "expense", expense_id, {"via": "api"})
+            repo.conn.commit()
+            return "", 204
+
+        body = request.get_json(silent=True) or {}
+        updates = {}
+        if "category" in body:
+            updates["category"] = body["category"]
+            updates["icon"] = CATEGORY_ICONS.get(body["category"], "fa-receipt")
+        if "amount" in body:
+            try:
+                amount_minor = to_minor(body["amount"])
+                if amount_minor <= 0:
+                    raise ValueError
+            except (ValueError, TypeError):
+                return api_error("amount must be a positive number.", 422, "validation_error")
+            updates["amount"] = float(to_major(amount_minor))
+            updates["amount_minor"] = amount_minor
+        if "date" in body:
+            try:
+                datetime.strptime(body["date"], "%Y-%m-%d")
+            except (ValueError, TypeError):
+                return api_error("date must be YYYY-MM-DD.", 422, "validation_error")
+            updates["date"] = body["date"]
+        for field in ("description", "payment_mode", "merchant"):
+            if field in body:
+                updates[field] = body[field]
+        if not updates:
+            return api_error("No valid fields to update.", 422, "validation_error")
+
+        repo.update(expense_id, uid, **updates)
+        services.record_audit(repo.conn, uid, "expense_updated", "expense", expense_id, {"via": "api"})
+        repo.conn.commit()
+        return jsonify(expense_to_json(repo.get(expense_id, uid)))
+    finally:
+        repo.close()
+
+
+@app.route("/api/v1/income", methods=["GET", "POST"])
+@login_required
+@api_rate_limited
+def api_v1_income():
+    uid = session["user_id"]
+    repo = repositories.IncomeRepository()
+    try:
+        if request.method == "POST":
+            body = request.get_json(silent=True) or {}
+            source = body.get("source")
+            amount = body.get("amount")
+            date = body.get("date")
+            if not source or amount is None or not date:
+                return api_error("source, amount and date are required.", 422, "validation_error")
+            try:
+                amount_minor = to_minor(amount)
+                if amount_minor <= 0:
+                    raise ValueError
+                datetime.strptime(date, "%Y-%m-%d")
+            except (ValueError, TypeError):
+                return api_error("amount must be positive and date must be YYYY-MM-DD.", 422, "validation_error")
+            cur = repo.conn.execute(
+                "INSERT INTO income (user_id, source, amount, amount_minor, description, date, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (uid, source, float(to_major(amount_minor)), amount_minor, body.get("description", ""), date, now_iso()),
+            )
+            services.record_audit(repo.conn, uid, "income_created", "income", cur.lastrowid, {"via": "api"})
+            repo.conn.commit()
+            row = repo.get(cur.lastrowid, uid)
+            return jsonify(dict(row)), 201
+
+        limit, offset = paginate_args()
+        rows = repo.list(uid, limit=limit, offset=offset, date_from=request.args.get("date_from"),
+                          date_to=request.args.get("date_to"))
+        return jsonify({"data": [dict(r) for r in rows], "limit": limit, "offset": offset})
+    finally:
+        repo.close()
+
+
+@app.route("/api/v1/accounts", methods=["GET", "POST"])
+@login_required
+@api_rate_limited
 def api_v1_accounts():
     uid = session["user_id"]
-    conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM accounts WHERE user_id=? AND status='active'", (uid,)).fetchall()
-    conn.close()
-    return jsonify([{
-        "id": r["id"], "name": r["name"], "type": r["type"],
-        "balance": str(to_major(r["balance_minor"])), "currency": r["currency"],
-        "is_liability": bool(r["is_liability"]),
-    } for r in rows])
+    repo = repositories.AccountRepository()
+    try:
+        if request.method == "POST":
+            body = request.get_json(silent=True) or {}
+            name = body.get("name")
+            acc_type = body.get("type")
+            if not name or acc_type not in services.ACCOUNT_TYPES:
+                return api_error(f"name is required and type must be one of {services.ACCOUNT_TYPES}.",
+                                  422, "validation_error")
+            user = repo.conn.execute("SELECT currency FROM users WHERE id=?", (uid,)).fetchone()
+            try:
+                new_id = services.create_account(repo.conn, uid, name, acc_type,
+                                                  body.get("opening_balance", 0), user["currency"], body.get("notes"))
+            except Exception:
+                return api_error("Invalid opening_balance.", 422, "validation_error")
+            repo.conn.commit()
+            row = repo.get(new_id, uid)
+            return jsonify({"id": row["id"], "name": row["name"], "type": row["type"],
+                             "balance": str(to_major(row["balance_minor"]))}), 201
+
+        rows = repo.list(uid)
+        return jsonify([{
+            "id": r["id"], "name": r["name"], "type": r["type"],
+            "balance": str(to_major(r["balance_minor"])), "currency": r["currency"],
+            "is_liability": bool(r["is_liability"]),
+        } for r in rows])
+    finally:
+        repo.close()
 
 
 @app.route("/api/v1/net-worth")
 @login_required
+@api_rate_limited
 def api_v1_net_worth():
     uid = session["user_id"]
     conn = get_db_connection()
@@ -1617,16 +1804,41 @@ def api_v1_net_worth():
     return jsonify({k: str(to_major(v)) for k, v in nw.items()})
 
 
+@app.route("/api/v1/budgets")
+@login_required
+@api_rate_limited
+def api_v1_budgets():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    rows = conn.execute("SELECT month, year, monthly_budget, savings_goal FROM budget WHERE user_id=?", (uid,)).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/v1/goals")
+@login_required
+@api_rate_limited
+def api_v1_goals():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    rows = conn.execute("SELECT * FROM goals WHERE user_id=? AND status='active'", (uid,)).fetchall()
+    conn.close()
+    return jsonify([{
+        "id": r["id"], "name": r["name"], "target": str(to_major(r["target_minor"])),
+        "saved": str(to_major(r["saved_minor"])), "target_date": r["target_date"], "status": r["status"],
+    } for r in rows])
+
+
 @app.route("/api/v1/transactions")
 @login_required
+@api_rate_limited
 def api_v1_transactions():
     uid = session["user_id"]
-    limit = min(request.args.get("limit", 50, type=int) or 50, 200)
-    offset = max(request.args.get("offset", 0, type=int) or 0, 0)
+    limit, offset = paginate_args()
     conn = get_db_connection()
     rows = conn.execute(
         "SELECT id, category, amount, date, payment_mode, description FROM expenses "
-        "WHERE user_id=? ORDER BY date DESC, id DESC LIMIT ? OFFSET ?",
+        "WHERE user_id=? AND is_deleted=0 ORDER BY date DESC, id DESC LIMIT ? OFFSET ?",
         (uid, limit, offset),
     ).fetchall()
     conn.close()
@@ -1712,6 +1924,8 @@ def too_large(e):
 
 @app.errorhandler(429)
 def too_many(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": {"code": "rate_limited", "message": "Too many requests."}}), 429
     return render_error(429, "Too many requests", "Please slow down and try again shortly.")
 
 

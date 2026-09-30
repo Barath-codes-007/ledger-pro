@@ -134,3 +134,34 @@ def save_receipt(file_storage, upload_dir: str):
     name = random_receipt_name(ext)
     file_storage.save(os.path.join(upload_dir, name))
     return f"receipts/{name}", None
+
+
+# ---------------------------------------------------------------------------
+# Generic API rate limiting (distinct from login rate limiting above)
+# ---------------------------------------------------------------------------
+class ApiRateLimiter:
+    """Sliding-window limiter on request COUNT (not just failures), keyed
+    by whatever the caller passes (typically the user id)."""
+
+    def __init__(self, max_requests=120, window=60):
+        self.max_requests = max_requests
+        self.window = window
+        self._hits = defaultdict(deque)
+
+    def _prune(self, key, now):
+        q = self._hits[key]
+        while q and now - q[0] > self.window:
+            q.popleft()
+        return q
+
+    def allow(self, key, now=None) -> bool:
+        """Record this request and return True if it's within the limit."""
+        now = time.time() if now is None else now
+        q = self._prune(key, now)
+        if len(q) >= self.max_requests:
+            return False
+        q.append(now)
+        return True
+
+    def clear(self):
+        self._hits.clear()
