@@ -262,22 +262,27 @@ def dashboard():
     today_str = today.strftime("%Y-%m-%d")
     next_month_start = (today.replace(day=28) + timedelta(days=4)).replace(day=1).strftime("%Y-%m-%d")
 
-    total_income = conn.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS t FROM income WHERE user_id = ?", (uid,)
+    total_income_minor = conn.execute(
+        "SELECT COALESCE(SUM(amount_minor), 0) AS t FROM income WHERE user_id = ?", (uid,)
     ).fetchone()["t"]
-    total_expense = conn.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS t FROM expenses WHERE user_id = ?", (uid,)
+    total_expense_minor = conn.execute(
+        "SELECT COALESCE(SUM(amount_minor), 0) AS t FROM expenses WHERE user_id = ?", (uid,)
     ).fetchone()["t"]
+    total_income = float(to_major(total_income_minor))
+    total_expense = float(to_major(total_expense_minor))
     balance = total_income - total_expense
 
-    month_expense = conn.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS t FROM expenses WHERE user_id = ? AND date >= ? AND date < ?",
+    month_expense_minor = conn.execute(
+        "SELECT COALESCE(SUM(amount_minor), 0) AS t FROM expenses WHERE user_id = ? AND date >= ? AND date < ?",
         (uid, month_start, next_month_start)
     ).fetchone()["t"]
-    month_income = conn.execute(
-        "SELECT COALESCE(SUM(amount), 0) AS t FROM income WHERE user_id = ? AND date >= ? AND date < ?",
+    month_income_minor = conn.execute(
+        "SELECT COALESCE(SUM(amount_minor), 0) AS t FROM income WHERE user_id = ? AND date >= ? AND date < ?",
         (uid, month_start, next_month_start)
     ).fetchone()["t"]
+    month_expense = float(to_major(month_expense_minor))
+    month_income = float(to_major(month_income_minor))
+
 
     txns_today = conn.execute(
         "SELECT COUNT(*) AS c FROM expenses WHERE user_id = ? AND date = ?", (uid, today_str)
@@ -674,9 +679,10 @@ def budget():
 
     month_start = today.replace(day=1).strftime("%Y-%m-%d")
     next_month_start = (today.replace(day=28) + timedelta(days=4)).replace(day=1).strftime("%Y-%m-%d")
-    spent = conn.execute(
-        "SELECT COALESCE(SUM(amount),0) AS t FROM expenses WHERE user_id=? AND date>=? AND date<?", (uid, month_start, next_month_start)
+    spent_minor = conn.execute(
+        "SELECT COALESCE(SUM(amount_minor),0) AS t FROM expenses WHERE user_id=? AND date>=? AND date<?", (uid, month_start, next_month_start)
     ).fetchone()["t"]
+    spent = float(to_major(spent_minor))
 
     recurring = conn.execute(
         "SELECT * FROM recurring_expenses WHERE user_id = ? AND active = 1 ORDER BY next_date ASC", (uid,)
@@ -780,18 +786,20 @@ def reports():
 
     # Monthly totals for the current year (for bar/line charts)
     year = datetime.now().year
-    monthly = conn.execute(
-        """SELECT strftime('%m', date) AS m, SUM(amount) AS total
+    monthly_rows = conn.execute(
+        """SELECT strftime('%m', date) AS m, SUM(amount_minor) AS total_minor
            FROM expenses WHERE user_id = ? AND strftime('%Y', date) = ?
            GROUP BY m ORDER BY m""",
         (uid, str(year))
     ).fetchall()
+    monthly = [{"m": r["m"], "total": float(to_major(r["total_minor"] or 0))} for r in monthly_rows]
 
-    category_totals = conn.execute(
-        """SELECT category, SUM(amount) AS total FROM expenses
-           WHERE user_id = ? GROUP BY category ORDER BY total DESC""",
+    category_rows = conn.execute(
+        """SELECT category, SUM(amount_minor) AS total_minor FROM expenses
+           WHERE user_id = ? GROUP BY category ORDER BY total_minor DESC""",
         (uid,)
     ).fetchall()
+    category_totals = [{"category": r["category"], "total": float(to_major(r["total_minor"] or 0))} for r in category_rows]
 
     conn.close()
     return render_template(
@@ -1038,17 +1046,18 @@ def api_chart_data():
 
     # Category breakdown (pie)
     cat_rows = conn.execute(
-        "SELECT category, SUM(amount) AS total FROM expenses WHERE user_id = ? GROUP BY category",
+        "SELECT category, SUM(amount_minor) AS total_minor FROM expenses WHERE user_id = ? GROUP BY category",
         (uid,)
     ).fetchall()
+    cat_rows = [{"category": r["category"], "total": float(to_major(r["total_minor"] or 0))} for r in cat_rows]
 
     # Last 30 days trend (line/area)
     start = (datetime.now() - timedelta(days=29)).strftime("%Y-%m-%d")
     trend_rows = conn.execute(
-        "SELECT date, SUM(amount) AS total FROM expenses WHERE user_id = ? AND date >= ? GROUP BY date ORDER BY date",
+        "SELECT date, SUM(amount_minor) AS total_minor FROM expenses WHERE user_id = ? AND date >= ? GROUP BY date ORDER BY date",
         (uid, start)
     ).fetchall()
-    trend_map = {r["date"]: r["total"] for r in trend_rows}
+    trend_map = {r["date"]: float(to_major(r["total_minor"] or 0)) for r in trend_rows}
     trend_labels, trend_values = [], []
     for i in range(30):
         d = (datetime.now() - timedelta(days=29 - i)).strftime("%Y-%m-%d")
@@ -1058,15 +1067,15 @@ def api_chart_data():
     # Income vs Expense monthly (current year)
     year = datetime.now().year
     inc_rows = conn.execute(
-        "SELECT strftime('%m', date) AS m, SUM(amount) AS total FROM income WHERE user_id=? AND strftime('%Y',date)=? GROUP BY m",
+        "SELECT strftime('%m', date) AS m, SUM(amount_minor) AS total_minor FROM income WHERE user_id=? AND strftime('%Y',date)=? GROUP BY m",
         (uid, str(year))
     ).fetchall()
     exp_rows = conn.execute(
-        "SELECT strftime('%m', date) AS m, SUM(amount) AS total FROM expenses WHERE user_id=? AND strftime('%Y',date)=? GROUP BY m",
+        "SELECT strftime('%m', date) AS m, SUM(amount_minor) AS total_minor FROM expenses WHERE user_id=? AND strftime('%Y',date)=? GROUP BY m",
         (uid, str(year))
     ).fetchall()
-    inc_map = {r["m"]: r["total"] for r in inc_rows}
-    exp_map = {r["m"]: r["total"] for r in exp_rows}
+    inc_map = {r["m"]: float(to_major(r["total_minor"] or 0)) for r in inc_rows}
+    exp_map = {r["m"]: float(to_major(r["total_minor"] or 0)) for r in exp_rows}
     months = [calendar.month_abbr[i] for i in range(1, 13)]
     income_series = [round(inc_map.get(f"{i:02d}", 0), 2) for i in range(1, 13)]
     expense_series = [round(exp_map.get(f"{i:02d}", 0), 2) for i in range(1, 13)]
@@ -1074,15 +1083,16 @@ def api_chart_data():
     # Weekly spending heatmap (day of week totals, last 12 weeks)
     heat_start = (datetime.now() - timedelta(weeks=12)).strftime("%Y-%m-%d")
     heat_rows = conn.execute(
-        "SELECT date, amount FROM expenses WHERE user_id = ? AND date >= ?", (uid, heat_start)
+        "SELECT date, amount_minor FROM expenses WHERE user_id = ? AND date >= ?", (uid, heat_start)
     ).fetchall()
-    dow_totals = [0.0] * 7
+    dow_minor = [0] * 7
     for r in heat_rows:
         try:
             d = datetime.strptime(r["date"], "%Y-%m-%d")
-            dow_totals[d.weekday()] += r["amount"]
+            dow_minor[d.weekday()] += r["amount_minor"] or 0
         except ValueError:
             pass
+    dow_totals = [float(to_major(m)) for m in dow_minor]
 
     conn.close()
 
@@ -1121,24 +1131,45 @@ def api_search():
 @app.route("/api/insights")
 @login_required
 def api_insights():
-    """Simple rule-based smart suggestions and unusual spending detection."""
+    """
+    Rule-based spending insights. Anomaly detection compares each expense to
+    its OWN category's history (mean of same-category spend), not a single
+    global average, and explains why a transaction was flagged (see #29).
+    """
     uid = session["user_id"]
     conn = get_db_connection()
 
     cat_rows = conn.execute(
-        "SELECT category, SUM(amount) AS total, COUNT(*) AS c FROM expenses WHERE user_id=? GROUP BY category ORDER BY total DESC LIMIT 3",
+        "SELECT category, SUM(amount_minor) AS total_minor, COUNT(*) AS c FROM expenses "
+        "WHERE user_id=? GROUP BY category ORDER BY total_minor DESC LIMIT 3",
         (uid,)
     ).fetchall()
+    cat_rows = [{"category": r["category"], "total": float(to_major(r["total_minor"] or 0)), "c": r["c"]} for r in cat_rows]
 
-    avg_row = conn.execute(
-        "SELECT AVG(amount) AS avg_amt FROM expenses WHERE user_id = ?", (uid,)
-    ).fetchone()
-    avg_amt = avg_row["avg_amt"] or 0
-
-    unusual = conn.execute(
-        "SELECT category, amount, date FROM expenses WHERE user_id = ? AND amount > ? ORDER BY amount DESC LIMIT 5",
-        (uid, avg_amt * 3 if avg_amt else 999999999)
+    # Per-category mean, using only categories with enough history to judge.
+    stats_rows = conn.execute(
+        "SELECT category, AVG(amount_minor) AS avg_minor, COUNT(*) AS n FROM expenses "
+        "WHERE user_id=? GROUP BY category HAVING n >= 3",
+        (uid,)
     ).fetchall()
+    stats = {r["category"]: r["avg_minor"] for r in stats_rows}
+
+    unusual = []
+    if stats:
+        all_recent = conn.execute(
+            "SELECT id, category, amount, amount_minor, date FROM expenses WHERE user_id=? "
+            "ORDER BY date DESC LIMIT 200", (uid,)
+        ).fetchall()
+        for r in all_recent:
+            cat_avg = stats.get(r["category"])
+            if cat_avg and r["amount_minor"] > cat_avg * 3:
+                unusual.append({
+                    "category": r["category"], "amount": r["amount"], "date": r["date"],
+                    "reason": f"This is significantly higher than your typical {r['category']} transactions "
+                              f"(about {round(r['amount_minor'] / cat_avg, 1)}x your usual amount in this category).",
+                })
+            if len(unusual) >= 5:
+                break
 
     conn.close()
 
@@ -1147,13 +1178,13 @@ def api_insights():
         top = cat_rows[0]
         suggestions.append(f"Your highest spending category is {top['category']} — consider setting a category-specific limit.")
     if unusual:
-        suggestions.append(f"We noticed {len(unusual)} unusually large transaction(s) compared to your average spend.")
+        suggestions.append(f"We noticed {len(unusual)} unusually large transaction(s) compared to your own history in that category.")
     if not suggestions:
         suggestions.append("Keep adding transactions to unlock personalized spending insights.")
 
     return jsonify({
-        "top_categories": [dict(r) for r in cat_rows],
-        "unusual_transactions": [dict(r) for r in unusual],
+        "top_categories": cat_rows,
+        "unusual_transactions": unusual,
         "suggestions": suggestions,
     })
 
