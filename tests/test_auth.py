@@ -55,3 +55,8 @@ def test_delete_account_requires_password(alice):
     conn = get_db_connection()
     assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
     conn.close()
+
+
+def test_dashboard_includes_command_palette_routes(alice):
+    html = alice.get("/dashboard").get_data(as_text=True)
+    assert "LEDGER_ROUTES" in html and "globalSearch" in html

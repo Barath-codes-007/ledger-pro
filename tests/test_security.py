@@ -97,3 +97,21 @@ def test_health_is_safe(client):
 def test_no_hardcoded_secret_in_source():
     src = open("app.py").read()
     assert "dev-secret-key" not in src
+
+
+def test_login_recorded_in_audit_log(client):
+    from conftest import signup, login
+    signup(client)
+    login(client)
+    resp = client.get("/audit-log")
+    assert b"Login success" in resp.data
+
+
+def test_settings_shows_previous_login_not_current(client):
+    from conftest import signup, login
+    signup(client)
+    login(client)
+    client.get("/logout")
+    login(client)
+    resp = client.get("/settings")
+    assert b"first session" not in resp.data
