@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Import — Ledger{% endblock %}
+{% block page_title %}Import Transactions{% endblock %}
+{% block page_subtitle %}Upload a CSV or Excel file of expenses{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width:520px;">
+  <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:14px;">
+    Ledger looks for columns named <strong>date</strong> and <strong>amount</strong> (required), plus
+    <strong>category</strong>, <strong>description</strong>, <strong>payment_mode</strong> and
+    <strong>merchant</strong> if present. You'll see a preview — including any rows that couldn't be
+    read — before anything is imported.
+  </p>
+  <form method="POST" action="{{ url_for('import_preview') }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label for="file">CSV or Excel file</label>
+      <input type="file" id="file" name="file" accept=".csv,.xlsx,.xls" required>
+    </div>
+    <button type="submit" class="btn btn-accent">Preview Import</button>
+  </form>
+</div>
+{% endblock %}

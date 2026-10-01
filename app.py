@@ -6,6 +6,8 @@ that power the dashboard charts and live search.
 """
 
 import os
+import tempfile
+import uuid
 import io
 import csv
 import logging
@@ -26,6 +28,7 @@ from database import get_db_connection, init_db, now_iso, backfill_minor_units
 import security
 import services
 import repositories
+import imports
 from money import to_minor, to_major, format_amount
 
 # ---------------------------------------------------------------------------
@@ -1443,6 +1446,65 @@ def mark_all_notifications_read():
     conn.close()
     flash("All notifications marked as read.", "success")
     return redirect(url_for("notifications_page"))
+
+
+@app.route("/import", methods=["GET"])
+@login_required
+def import_page():
+    return render_template("import.html")
+
+
+@app.route("/import/preview", methods=["POST"])
+@login_required
+def import_preview():
+    uid = session["user_id"]
+    file = request.files.get("file")
+    if not file or not file.filename:
+        flash("Please choose a CSV or Excel file.", "error")
+        return redirect(url_for("import_page"))
+    if not file.filename.lower().endswith((".csv", ".xlsx", ".xls")):
+        flash("Only CSV and Excel files are supported.", "error")
+        return redirect(url_for("import_page"))
+
+    tmp_path = os.path.join(tempfile.gettempdir(), f"ledger_upload_{uuid.uuid4().hex}_{file.filename}")
+    file.save(tmp_path)
+    conn = get_db_connection()
+    try:
+        preview = imports.build_preview(conn, uid, tmp_path, file.filename)
+    except Exception as e:
+        conn.close()
+        os.remove(tmp_path) if os.path.isfile(tmp_path) else None
+        flash(f"Could not read that file: {e}", "error")
+        return redirect(url_for("import_page"))
+    conn.close()
+    os.remove(tmp_path)
+
+    if preview["missing_required"]:
+        flash(f"The file is missing required column(s): {', '.join(preview['missing_required'])}. "
+              f"Columns found: {', '.join(preview['columns_found'])}.", "error")
+        return redirect(url_for("import_page"))
+
+    return render_template("import_preview.html", preview=preview, filename=file.filename)
+
+
+@app.route("/import/confirm", methods=["POST"])
+@login_required
+def import_confirm():
+    uid = session["user_id"]
+    token = request.form.get("token")
+    skip_duplicates = request.form.get("skip_duplicates") == "on"
+    conn = get_db_connection()
+    user = conn.execute("SELECT currency FROM users WHERE id=?", (uid,)).fetchone()
+    result = imports.commit_import(conn, uid, token, skip_duplicates, user["currency"] if user else DEFAULT_CURRENCY)
+    if not result:
+        conn.close()
+        flash("That import session expired. Please upload the file again.", "error")
+        return redirect(url_for("import_page"))
+    conn.commit()
+    conn.close()
+    flash(f"Imported {result['imported']} transaction(s). "
+          f"{result['skipped']} skipped, {result['duplicate']} possible duplicate(s) flagged.", "success")
+    return redirect(url_for("expenses"))
 
 
 @app.route("/analytics")

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Import Preview — Ledger{% endblock %}
+{% block page_title %}Review Import{% endblock %}
+{% block page_subtitle %}{{ filename }} — nothing is saved until you confirm{% endblock %}
+
+{% block content %}
+<div class="grid grid-3">
+  <div class="stat-card tone-ink"><div class="stat-label">Valid rows</div><div class="stat-value mono">{{ preview['valid_rows']|length }}</div></div>
+  <div class="stat-card tone-red"><div class="stat-label">Invalid rows</div><div class="stat-value mono">{{ preview['invalid_rows']|length }}</div></div>
+  <div class="stat-card tone-gold"><div class="stat-label">Possible duplicates</div><div class="stat-value mono">{{ preview['valid_rows']|selectattr('is_duplicate')|list|length }}</div></div>
+</div>
+
+{% if preview['token'] %}
+<div class="panel" style="margin-top:16px;">
+  <form method="POST" action="{{ url_for('import_confirm') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="token" value="{{ preview['token'] }}">
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <input type="checkbox" name="skip_duplicates" checked>
+      Skip rows flagged as possible duplicates
+    </label>
+    <button type="submit" class="btn btn-accent" {{ 'disabled' if not preview['valid_rows'] }}>Confirm Import</button>
+    <a href="{{ url_for('import_page') }}" class="chip chip-gray">Cancel</a>
+  </form>
+</div>
+{% endif %}
+
+{% if preview['valid_rows'] %}
+<div class="panel" style="margin-top:16px;">
+  <div class="panel-head"><h3>Valid rows</h3></div>
+  <div style="max-height:360px;overflow-y:auto;">
+    <table class="table">
+      <thead><tr><th>Row</th><th>Date</th><th>Category</th><th>Amount</th><th>Description</th><th></th></tr></thead>
+      <tbody>
+      {% for r in preview['valid_rows'] %}
+        <tr>
+          <td>{{ r['row'] }}</td><td>{{ r['date'] }}</td><td>{{ r['category'] }}</td>
+          <td class="mono">{{ currency_symbol }}{{ '%.2f'|format(r['amount']) }}</td>
+          <td>{{ r['description'] }}</td>
+          <td>{% if r['is_duplicate'] %}<span class="chip chip-gray" style="font-size:10px;">Possible duplicate</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if preview['invalid_rows'] %}
+<div class="panel" style="margin-top:16px;">
+  <div class="panel-head"><h3>Rows that couldn't be read</h3></div>
+  <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">These are never imported silently — fix them in your source file and re-upload if you want them included.</p>
+  <table class="table">
+    <thead><tr><th>Row</th><th>Reason</th></tr></thead>
+    <tbody>
+    {% for r in preview['invalid_rows'] %}
+      <tr><td>{{ r['row'] }}</td><td>{{ r['reason'] }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}
