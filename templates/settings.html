@@ -8,6 +8,7 @@
   <button class="tab-btn active" data-tab="general">General</button>
   <button class="tab-btn" data-tab="appearance">Appearance</button>
   <button class="tab-btn" data-tab="security">Security</button>
+  <button class="tab-btn" data-tab="notifications">Notifications</button>
   <button class="tab-btn" data-tab="danger">Danger Zone</button>
 </div>
 
@@ -100,6 +101,31 @@
         </div>
       </div>
       <button type="submit" class="btn btn-accent">Change Password</button>
+    </form>
+  </div>
+
+  <div class="settings-panel" id="tab-notifications">
+    <form method="POST" action="{{ url_for('update_notification_prefs') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="settings-row" style="padding:10px 0;">
+        <label style="display:flex;align-items:center;gap:10px;">
+          <input type="checkbox" name="notify_budget_warnings" {{ 'checked' if prefs and prefs['notify_budget_warnings'] }}>
+          Budget warnings (approaching or exceeding your monthly budget)
+        </label>
+      </div>
+      <div class="settings-row" style="padding:10px 0;">
+        <label style="display:flex;align-items:center;gap:10px;">
+          <input type="checkbox" name="notify_bills" {{ 'checked' if prefs and prefs['notify_bills'] }}>
+          Upcoming bills (recurring payments due soon)
+        </label>
+      </div>
+      <div class="settings-row" style="padding:10px 0;">
+        <label style="display:flex;align-items:center;gap:10px;">
+          <input type="checkbox" name="notify_goals" {{ 'checked' if prefs and prefs['notify_goals'] }}>
+          Goal milestones (progress and completion)
+        </label>
+      </div>
+      <button type="submit" class="btn btn-accent" style="margin-top:10px;">Save Preferences</button>
     </form>
   </div>
 

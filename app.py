@@ -134,6 +134,15 @@ def get_user_currency_symbol(user):
     return CURRENCIES.get(user["currency"], CURRENCIES[DEFAULT_CURRENCY])
 
 
+def _unread_count_for_nav():
+    if "user_id" not in session:
+        return 0
+    conn = get_db_connection()
+    count = services.unread_notification_count(conn, session["user_id"])
+    conn.close()
+    return count
+
+
 @app.context_processor
 def inject_globals():
     """Make user info and helpers available to every template."""
@@ -142,6 +151,7 @@ def inject_globals():
         current_user=user,
         currency_symbol=get_user_currency_symbol(user),
         user_currency=(user["currency"] if user else DEFAULT_CURRENCY),
+        unread_notifications=_unread_count_for_nav(),
         csrf_token=lambda: security.get_csrf_token(session),
         category_icons=CATEGORY_ICONS,
         payment_modes=PAYMENT_MODES,
@@ -315,6 +325,7 @@ def dashboard():
     savings_rate = round(((total_income - total_expense) / total_income * 100), 1) if total_income else 0
 
     services.process_due_recurring(conn, uid, today_str)
+    services.generate_notifications(conn, uid, today_str)
     nw = services.net_worth(conn, uid)
     cf = services.cash_flow(conn, uid, month_start, today_str)
     conn.commit()
@@ -1038,7 +1049,27 @@ def settings():
     ).fetchall()
     conn.close()
     last_login = rows[1]["created_at"] if len(rows) > 1 else None
-    return render_template("settings.html", last_login=last_login)
+    conn = get_db_connection()
+    prefs = conn.execute("SELECT * FROM settings WHERE user_id=?", (uid,)).fetchone()
+    conn.close()
+    return render_template("settings.html", last_login=last_login, prefs=prefs)
+
+
+@app.route("/settings/notifications", methods=["POST"])
+@login_required
+def update_notification_prefs():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    conn.execute(
+        "UPDATE settings SET notify_budget_warnings=?, notify_bills=?, notify_goals=? WHERE user_id=?",
+        (1 if request.form.get("notify_budget_warnings") else 0,
+         1 if request.form.get("notify_bills") else 0,
+         1 if request.form.get("notify_goals") else 0, uid),
+    )
+    conn.commit()
+    conn.close()
+    flash("Notification preferences saved.", "success")
+    return redirect(url_for("settings"))
 
 
 @app.route("/settings/profile", methods=["POST"])
@@ -1377,6 +1408,41 @@ def add_transfer():
         flash("Transfer completed.", "success")
     conn.close()
     return redirect(url_for("accounts"))
+
+
+@app.route("/notifications")
+@login_required
+def notifications_page():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT * FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 100", (uid,)
+    ).fetchall()
+    conn.close()
+    return render_template("notifications.html", notifications=rows)
+
+
+@app.route("/notifications/read/<int:notif_id>", methods=["POST"])
+@login_required
+def mark_notification_read(notif_id):
+    uid = session["user_id"]
+    conn = get_db_connection()
+    conn.execute("UPDATE notifications SET is_read=1 WHERE id=? AND user_id=?", (notif_id, uid))
+    conn.commit()
+    conn.close()
+    return redirect(request.referrer or url_for("notifications_page"))
+
+
+@app.route("/notifications/read-all", methods=["POST"])
+@login_required
+def mark_all_notifications_read():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    conn.execute("UPDATE notifications SET is_read=1 WHERE user_id=?", (uid,))
+    conn.commit()
+    conn.close()
+    flash("All notifications marked as read.", "success")
+    return redirect(url_for("notifications_page"))
 
 
 @app.route("/statements")
@@ -1826,7 +1892,7 @@ def api_v1_net_worth():
 def api_v1_budgets():
     uid = session["user_id"]
     conn = get_db_connection()
-    rows = conn.execute("SELECT month, year, monthly_budget, savings_goal FROM budget WHERE user_id=?", (uid,)).fetchall()
+    rows = conn.execute("SELECT month, year, amount AS monthly_budget, savings_goal FROM budget WHERE user_id=?", (uid,)).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
 

@@ -107,3 +107,12 @@ def test_api_v1_rate_limited(alice, app):
     finally:
         ledger_app.api_limiter.max_requests = 120
         ledger_app.api_limiter.clear()
+
+
+def test_api_v1_budgets_returns_correct_columns(alice):
+    from conftest import post
+    post(alice, "/budget", {"amount": "1500", "savings_goal": "200"})
+    r = alice.get("/api/v1/budgets")
+    body = r.get_json()
+    assert len(body) == 1
+    assert body[0]["monthly_budget"] == 1500.0 and body[0]["savings_goal"] == 200.0

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Notifications — Ledger{% endblock %}
+{% block page_title %}Notifications{% endblock %}
+{% block page_subtitle %}Budget warnings, upcoming bills and goal milestones{% endblock %}
+
+{% block content %}
+<div class="panel">
+  {% if notifications %}
+    <form method="POST" action="{{ url_for('mark_all_notifications_read') }}" style="margin-bottom:12px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="chip chip-gray" style="border:0;cursor:pointer;">Mark all as read</button>
+    </form>
+    {% for n in notifications %}
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);{{ 'opacity:.55;' if n['is_read'] }}">
+        <div>
+          <span class="chip chip-gray" style="font-size:10px;">{{ n['type']|replace('_',' ')|capitalize }}</span>
+          <p style="margin-top:6px;font-size:13.5px;">{{ n['message'] }}</p>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">{{ n['created_at'] }}</p>
+        </div>
+        {% if not n['is_read'] %}
+        <form method="POST" action="{{ url_for('mark_notification_read', notif_id=n['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="chip chip-gray" style="border:0;cursor:pointer;white-space:nowrap;">Mark read</button>
+        </form>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <p style="color:var(--text-muted);font-size:13px;">No notifications yet. We'll let you know about budget warnings, upcoming bills and goal milestones here.</p>
+  {% endif %}
+</div>
+{% endblock %}

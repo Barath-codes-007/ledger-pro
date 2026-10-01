@@ -96,6 +96,10 @@
           <input type="text" id="globalSearch" placeholder="Search transactions...">
           <div class="search-results" id="searchResults"></div>
         </div>
+        <a href="{{ url_for('notifications_page') }}" class="theme-toggle" aria-label="Notifications" style="position:relative;text-decoration:none;">
+          <i class="fa-solid fa-bell"></i>
+          {% if unread_notifications %}<span style="position:absolute;top:2px;right:2px;background:var(--ledger-red);color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;line-height:16px;text-align:center;">{{ unread_notifications if unread_notifications < 10 else '9+' }}</span>{% endif %}
+        </a>
         <button class="theme-toggle" aria-label="Toggle dark mode"><i class="fa-solid fa-moon"></i></button>
       </div>
     </header>

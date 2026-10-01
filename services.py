@@ -417,3 +417,83 @@ def cash_flow_statement(conn, user_id, start_date, end_date):
         "closing_minor": cf["closing_minor"],
         "transfer_volume_minor": transfers_out,  # informational: moved between own accounts, net-zero
     }
+
+
+# ---------------------------------------------------------------------------
+# Notification Center (#43) + budget alerts (#20)
+# Notifications are generated on demand (called from the dashboard route)
+# rather than by a background scheduler, since this app has none. Each
+# check is deduplicated so refreshing the dashboard doesn't spam entries.
+# ---------------------------------------------------------------------------
+def _notification_exists_today(conn, user_id, ntype, message):
+    from database import now_iso
+    today = now_iso()[:10]
+    row = conn.execute(
+        "SELECT id FROM notifications WHERE user_id=? AND type=? AND message=? AND created_at LIKE ?",
+        (user_id, ntype, message, f"{today}%"),
+    ).fetchone()
+    return row is not None
+
+
+def _add_notification(conn, user_id, ntype, message):
+    if _notification_exists_today(conn, user_id, ntype, message):
+        return
+    conn.execute(
+        "INSERT INTO notifications (user_id, type, message, is_read, created_at) VALUES (?, ?, ?, 0, ?)",
+        (user_id, ntype, message, now_iso()),
+    )
+
+
+def generate_notifications(conn, user_id, today_str=None):
+    """Check budget usage, upcoming bills and goal milestones, and add a
+    notification for anything newsworthy that hasn't already been recorded
+    today. Respects the user's per-type preferences in `settings`."""
+    from datetime import datetime as _dt, timedelta as _td
+    today_str = today_str or _dt.now().strftime("%Y-%m-%d")
+    prefs = conn.execute("SELECT * FROM settings WHERE user_id=?", (user_id,)).fetchone()
+    if not prefs:
+        return
+
+    if prefs["notify_budget_warnings"]:
+        today = _dt.strptime(today_str, "%Y-%m-%d")
+        budget_row = conn.execute(
+            "SELECT * FROM budget WHERE user_id=? AND month=? AND year=?",
+            (user_id, today.month, today.year)).fetchone()
+        if budget_row and budget_row["amount"]:
+            month_start = today.replace(day=1).strftime("%Y-%m-%d")
+            spent_minor = conn.execute(
+                "SELECT COALESCE(SUM(amount_minor),0) t FROM expenses WHERE user_id=? AND date>=? AND date<=? AND is_deleted=0",
+                (user_id, month_start, today_str)).fetchone()["t"] or 0
+            budget_minor = to_minor(budget_row["amount"])
+            if budget_minor > 0:
+                pct = spent_minor / budget_minor
+                if pct >= 1.0:
+                    _add_notification(conn, user_id, "budget_exceeded",
+                                       f"You've exceeded your {today.strftime('%B')} budget "
+                                       f"({to_major(spent_minor)} of {to_major(budget_minor)}).")
+                elif pct >= 0.8:
+                    _add_notification(conn, user_id, "budget_warning",
+                                       f"You've used {round(pct * 100)}% of your {today.strftime('%B')} budget.")
+
+    if prefs["notify_bills"]:
+        soon = (_dt.strptime(today_str, "%Y-%m-%d") + _td(days=3)).strftime("%Y-%m-%d")
+        due = conn.execute(
+            "SELECT * FROM recurring_expenses WHERE user_id=? AND active=1 AND next_date>=? AND next_date<=?",
+            (user_id, today_str, soon)).fetchall()
+        for r in due:
+            label = r["description"] or r["category"]
+            _add_notification(conn, user_id, "upcoming_bill",
+                               f"{label} ({to_major(to_minor(r['amount']))}) is due on {r['next_date']}.")
+
+    if prefs["notify_goals"]:
+        goals = conn.execute("SELECT * FROM goals WHERE user_id=? AND status='active'", (user_id,)).fetchall()
+        for g in goals:
+            if g["target_minor"] and g["saved_minor"] / g["target_minor"] >= 0.9:
+                _add_notification(conn, user_id, "goal_milestone",
+                                   f"You're over 90% of the way to your \"{g['name']}\" goal.")
+
+
+def unread_notification_count(conn, user_id):
+    return conn.execute(
+        "SELECT COUNT(*) c FROM notifications WHERE user_id=? AND is_read=0", (user_id,)
+    ).fetchone()["c"]
