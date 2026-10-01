@@ -1445,6 +1445,22 @@ def mark_all_notifications_read():
     return redirect(url_for("notifications_page"))
 
 
+@app.route("/analytics")
+@login_required
+def analytics_page():
+    uid = session["user_id"]
+    conn = get_db_connection()
+    forecast = services.forecast_30_day_balance(conn, uid)
+    by_merchant = services.spending_by_merchant(conn, uid)
+    by_account = services.spending_by_account(conn, uid)
+    growth = services.category_growth(conn, uid)
+    recurring_candidates = services.detect_recurring_candidates(conn, uid)
+    conn.close()
+    return render_template("analytics.html", forecast=forecast, by_merchant=by_merchant,
+                            by_account=by_account, growth=growth,
+                            recurring_candidates=recurring_candidates, to_major=to_major)
+
+
 @app.route("/statements")
 @login_required
 def statements():

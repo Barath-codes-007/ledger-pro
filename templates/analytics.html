@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Analytics — Ledger{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+{% block page_subtitle %}Forecast, spending by merchant and account, and category trends{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="panel-head"><h3>30-Day Cash Flow Forecast <span class="chip chip-gray" style="font-size:10px;">ESTIMATE</span></h3></div>
+  <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Based on your recent 30-day spending rate plus known upcoming recurring bills. This is a projection, not a guarantee.</p>
+  <div class="grid grid-2">
+    <div class="stat-card tone-ink">
+      <div class="stat-label">Current Balance</div>
+      <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(forecast['current_balance_minor'])) }}</div>
+    </div>
+    <div class="stat-card tone-gold">
+      <div class="stat-label">Estimated 30-Day Balance</div>
+      <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(forecast['projected_balance_minor'])) }}</div>
+    </div>
+  </div>
+  <p style="font-size:12px;color:var(--text-muted);margin-top:10px;">
+    Recent daily spend rate: {{ currency_symbol }}{{ '%.2f'|format(to_major(forecast['daily_run_rate_minor'])) }}/day &middot;
+    Known upcoming bills in the next 30 days: {{ currency_symbol }}{{ '%.2f'|format(to_major(forecast['recurring_due_minor'])) }}
+  </p>
+</div>
+
+<div class="panel" style="margin-top:16px;">
+  <div class="panel-head"><h3>Category Growth (this month vs last)</h3></div>
+  {% if growth %}
+    <table class="table">
+      <thead><tr><th>Category</th><th>This Month</th><th>Last Month</th><th>Change</th></tr></thead>
+      <tbody>
+      {% for g in growth[:10] %}
+        <tr>
+          <td>{{ g['category'] }}</td>
+          <td class="mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(g['this_month_minor'])) }}</td>
+          <td class="mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(g['last_month_minor'])) }}</td>
+          <td class="mono" style="color: {{ 'var(--ledger-red)' if g['change_pct'] and g['change_pct'] > 0 else 'var(--ledger-green)' }}">
+            {% if g['change_pct'] is none %}New{% else %}{{ '+' if g['change_pct'] > 0 }}{{ g['change_pct'] }}%{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:var(--text-muted);font-size:13px;">Not enough data yet to compare months.</p>
+  {% endif %}
+</div>
+
+<div class="dashboard-grid" style="margin-top:16px;">
+  <div class="panel">
+    <div class="panel-head"><h3>Top Merchants</h3></div>
+    {% if by_merchant %}
+      <table class="table">
+        <thead><tr><th>Merchant</th><th>Total</th><th>Transactions</th></tr></thead>
+        <tbody>
+        {% for m in by_merchant %}
+          <tr><td>{{ m['merchant'] }}</td><td class="mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(m['total_minor'])) }}</td><td>{{ m['count'] }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p style="color:var(--text-muted);font-size:13px;">Add a merchant name to your expenses to see this breakdown.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><h3>Spending by Account</h3></div>
+    {% if by_account %}
+      <table class="table">
+        <thead><tr><th>Account</th><th>Total Spent</th></tr></thead>
+        <tbody>
+        {% for a in by_account %}
+          <tr><td>{{ a['account'] }}</td><td class="mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(a['total_minor'])) }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p style="color:var(--text-muted);font-size:13px;">Add accounts to see spending broken down by where it came from.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel" style="margin-top:16px;">
+  <div class="panel-head"><h3>Possible Recurring Payments</h3></div>
+  <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Detected from your spending history — similar amounts in the same category across 3+ months. Nothing is added automatically.</p>
+  {% if recurring_candidates %}
+    <table class="table">
+      <thead><tr><th>Category</th><th>Merchant</th><th>Approx. Amount</th><th>Months Seen</th></tr></thead>
+      <tbody>
+      {% for c in recurring_candidates %}
+        <tr>
+          <td>{{ c['category'] }}</td><td>{{ c['merchant'] or '—' }}</td>
+          <td class="mono">{{ currency_symbol }}{{ '%.2f'|format(to_major(c['approx_amount_minor'])) }}</td>
+          <td>{{ c['months_seen'] }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:var(--text-muted);font-size:13px;">No recurring patterns detected yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

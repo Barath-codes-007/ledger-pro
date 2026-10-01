@@ -497,3 +497,141 @@ def unread_notification_count(conn, user_id):
     return conn.execute(
         "SELECT COUNT(*) c FROM notifications WHERE user_id=? AND is_read=0", (user_id,)
     ).fetchone()["c"]
+
+
+# ---------------------------------------------------------------------------
+# Cash flow forecast (#26) - a plain projection from known recurring items
+# and the recent average daily spend. Always labelled an estimate.
+# ---------------------------------------------------------------------------
+def forecast_30_day_balance(conn, user_id, as_of=None):
+    from datetime import datetime as _dt, timedelta as _td
+    as_of = as_of or _dt.now().strftime("%Y-%m-%d")
+    as_of_date = _dt.strptime(as_of, "%Y-%m-%d")
+
+    current_balance_minor = sum(a["balance_minor"] for a in list_accounts(conn, user_id))
+
+    # Recent daily run-rate from the last 30 days of actual expenses.
+    start = (as_of_date - timedelta_days(30)).strftime("%Y-%m-%d")
+    recent_expense_minor = conn.execute(
+        "SELECT COALESCE(SUM(amount_minor),0) t FROM expenses WHERE user_id=? AND date>=? AND date<=? AND is_deleted=0",
+        (user_id, start, as_of)).fetchone()["t"] or 0
+    daily_run_rate_minor = recent_expense_minor / 30.0
+
+    # Known upcoming recurring expenses due in the next 30 days.
+    horizon = (as_of_date + timedelta_days(30)).strftime("%Y-%m-%d")
+    recurring_due_minor = 0
+    for r in conn.execute("SELECT * FROM recurring_expenses WHERE user_id=? AND active=1", (user_id,)).fetchall():
+        next_date = r["next_date"]
+        amount_minor = to_minor(r["amount"])
+        # Walk forward through occurrences within the 30-day window.
+        guard = 0
+        while next_date <= horizon and guard < 12:
+            if next_date >= as_of:
+                recurring_due_minor += amount_minor
+            next_date = _advance_date(next_date, r["frequency"])
+            guard += 1
+
+    projected_expense_minor = int(daily_run_rate_minor * 30) + recurring_due_minor
+    projected_balance_minor = current_balance_minor - projected_expense_minor
+
+    return {
+        "current_balance_minor": current_balance_minor,
+        "daily_run_rate_minor": round(daily_run_rate_minor),
+        "recurring_due_minor": recurring_due_minor,
+        "projected_expense_minor": projected_expense_minor,
+        "projected_balance_minor": projected_balance_minor,
+        "is_estimate": True,
+    }
+
+
+def timedelta_days(n):
+    from datetime import timedelta
+    return timedelta(days=n)
+
+
+# ---------------------------------------------------------------------------
+# Recurring payment auto-detection (#23) - pattern match on category +
+# similar amount recurring across consecutive months. Suggests only; never
+# auto-creates a recurring entry.
+# ---------------------------------------------------------------------------
+def detect_recurring_candidates(conn, user_id):
+    rows = conn.execute(
+        "SELECT category, amount_minor, date, merchant FROM expenses "
+        "WHERE user_id=? AND is_deleted=0 AND txn_type='expense' ORDER BY date",
+        (user_id,)).fetchall()
+
+    # Group by (category, merchant, amount rounded to nearest 1%) to catch
+    # near-identical recurring charges without demanding an exact match.
+    groups = {}
+    for r in rows:
+        bucket_amount = round(r["amount_minor"] / 100) * 100  # nearest whole currency unit
+        key = (r["category"], r["merchant"] or "", bucket_amount)
+        groups.setdefault(key, []).append(r["date"])
+
+    already_tracked = {
+        (r["category"]) for r in conn.execute(
+            "SELECT category FROM recurring_expenses WHERE user_id=? AND active=1", (user_id,)).fetchall()
+    }
+
+    candidates = []
+    for (category, merchant, bucket_amount), dates in groups.items():
+        months = sorted({d[:7] for d in dates})  # YYYY-MM
+        if len(months) >= 3 and category not in already_tracked:
+            candidates.append({
+                "category": category, "merchant": merchant or None,
+                "approx_amount_minor": bucket_amount, "months_seen": len(months),
+                "last_seen": max(dates),
+            })
+    return candidates
+
+
+# ---------------------------------------------------------------------------
+# Deeper analytics (#27): by account, by merchant, category/expense growth
+# ---------------------------------------------------------------------------
+def spending_by_merchant(conn, user_id, limit=10):
+    rows = conn.execute(
+        "SELECT merchant, SUM(amount_minor) t, COUNT(*) c FROM expenses "
+        "WHERE user_id=? AND is_deleted=0 AND merchant IS NOT NULL AND merchant != '' "
+        "GROUP BY merchant ORDER BY t DESC LIMIT ?",
+        (user_id, limit)).fetchall()
+    return [{"merchant": r["merchant"], "total_minor": r["t"], "count": r["c"]} for r in rows]
+
+
+def spending_by_account(conn, user_id):
+    rows = conn.execute(
+        """SELECT a.name AS account_name, COALESCE(SUM(e.amount_minor),0) t
+           FROM accounts a LEFT JOIN expenses e ON e.account_id = a.id AND e.is_deleted=0
+           WHERE a.user_id=? AND a.status='active' GROUP BY a.id ORDER BY t DESC""",
+        (user_id,)).fetchall()
+    return [{"account": r["account_name"], "total_minor": r["t"]} for r in rows]
+
+
+def category_growth(conn, user_id):
+    """This month's spend per category vs last month's, as a percentage
+    change. A category with no spend last month shows as 'new' rather than
+    an undefined or infinite percentage."""
+    from datetime import datetime as _dt
+    today = _dt.now()
+    this_month_start = today.replace(day=1).strftime("%Y-%m-%d")
+    last_month_end = (today.replace(day=1) - timedelta_days(1))
+    last_month_start = last_month_end.replace(day=1).strftime("%Y-%m-%d")
+    last_month_end_str = last_month_end.strftime("%Y-%m-%d")
+
+    this_rows = {r["category"]: r["t"] for r in conn.execute(
+        "SELECT category, SUM(amount_minor) t FROM expenses WHERE user_id=? AND date>=? AND is_deleted=0 GROUP BY category",
+        (user_id, this_month_start)).fetchall()}
+    last_rows = {r["category"]: r["t"] for r in conn.execute(
+        "SELECT category, SUM(amount_minor) t FROM expenses WHERE user_id=? AND date>=? AND date<=? AND is_deleted=0 GROUP BY category",
+        (user_id, last_month_start, last_month_end_str)).fetchall()}
+
+    results = []
+    for cat in set(this_rows) | set(last_rows):
+        this_amt = this_rows.get(cat, 0)
+        last_amt = last_rows.get(cat, 0)
+        if last_amt == 0:
+            change_pct = None  # "new" this month
+        else:
+            change_pct = round((this_amt - last_amt) / last_amt * 100, 1)
+        results.append({"category": cat, "this_month_minor": this_amt, "last_month_minor": last_amt,
+                         "change_pct": change_pct})
+    return sorted(results, key=lambda r: r["this_month_minor"], reverse=True)
