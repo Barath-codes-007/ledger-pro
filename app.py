@@ -29,6 +29,7 @@ import security
 import services
 import repositories
 import imports
+import copilot
 from money import to_minor, to_major, format_amount
 
 # ---------------------------------------------------------------------------
@@ -1639,6 +1640,22 @@ def start_demo():
     session["user_name"] = "Demo User"
     flash("Welcome to the Ledger demo — this account is seeded with sample data clearly marked [DEMO].", "success")
     return redirect(url_for("dashboard"))
+
+
+@app.route("/copilot", methods=["GET", "POST"])
+@login_required
+def copilot_page():
+    uid = session["user_id"]
+    answer_text = None
+    question = ""
+    if request.method == "POST":
+        question = request.form.get("question", "").strip()
+        if question:
+            conn = get_db_connection()
+            answer_text = copilot.answer(conn, uid, question, get_user_currency_symbol(
+                conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()))
+            conn.close()
+    return render_template("copilot.html", answer=answer_text, question=question)
 
 
 @app.route("/analytics")

@@ -63,6 +63,7 @@
       <a href="{{ url_for('net_worth_page') }}" class="{{ 'active' if request.endpoint == 'net_worth_page' }}"><i class="fa-solid fa-scale-balanced"></i> Net Worth</a>
       <a href="{{ url_for('statements') }}" class="{{ 'active' if request.endpoint == 'statements' }}"><i class="fa-solid fa-file-invoice-dollar"></i> Statements</a>
       <a href="{{ url_for('analytics_page') }}" class="{{ 'active' if request.endpoint == 'analytics_page' }}"><i class="fa-solid fa-chart-line"></i> Analytics</a>
+      <a href="{{ url_for('copilot_page') }}" class="{{ 'active' if request.endpoint == 'copilot_page' }}"><i class="fa-solid fa-comment-dollar"></i> Copilot</a>
       <a href="{{ url_for('import_page') }}" class="{{ 'active' if request.endpoint in ('import_page','import_preview','import_confirm') }}"><i class="fa-solid fa-file-import"></i> Import</a>
       <a href="{{ url_for('calendar_page') }}" class="{{ 'active' if request.endpoint == 'calendar_page' }}"><i class="fa-solid fa-calendar-days"></i> Calendar</a>
       <a href="{{ url_for('snapshot_page') }}" class="{{ 'active' if request.endpoint == 'snapshot_page' }}"><i class="fa-solid fa-camera"></i> Snapshot</a>
