@@ -21,9 +21,10 @@
 </head>
 <body>
 
-<div class="page-loader"><div class="spinner"></div></div>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<div class="page-loader" aria-hidden="true"><div class="spinner"></div></div>
 
-<div class="toast-stack">
+<div class="toast-stack" role="status" aria-live="polite">
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       {% for category, message in messages %}
@@ -103,10 +104,11 @@
         </div>
       </div>
       <div class="topbar-actions">
-        <div class="search-box">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="text" id="globalSearch" placeholder="Search transactions...">
-          <div class="search-results" id="searchResults"></div>
+        <div class="search-box" role="search">
+          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          <label for="globalSearch" class="sr-only">Search transactions</label>
+          <input type="text" id="globalSearch" placeholder="Search transactions..." aria-label="Search transactions">
+          <div class="search-results" id="searchResults" role="listbox" aria-label="Search results"></div>
         </div>
         <a href="{{ url_for('notifications_page') }}" class="theme-toggle" aria-label="Notifications" style="position:relative;text-decoration:none;">
           <i class="fa-solid fa-bell"></i>
@@ -116,7 +118,7 @@
       </div>
     </header>
 
-    <main class="page-body">
+    <main class="page-body" id="main-content" tabindex="-1">
       {% block content %}{% endblock %}
     </main>
     <footer class="app-footer" style="padding:18px 24px;font-size:12px;opacity:.6;text-align:center;">
