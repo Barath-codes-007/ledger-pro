@@ -8,7 +8,7 @@ def test_schema_migrations_recorded(app):
     conn = get_db_connection()
     versions = [r["version"] for r in conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
     conn.close()
-    assert versions == [1, 2, 3, 4, 5, 6, 7]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8]
 
 
 def test_new_tables_exist(app):

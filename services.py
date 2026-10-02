@@ -635,3 +635,162 @@ def category_growth(conn, user_id):
         results.append({"category": cat, "this_month_minor": this_amt, "last_month_minor": last_amt,
                          "change_pct": change_pct})
     return sorted(results, key=lambda r: r["this_month_minor"], reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# Financial Snapshot (#80) - a point-in-time summary for a given month.
+# ---------------------------------------------------------------------------
+def financial_snapshot(conn, user_id, year, month):
+    month_start = f"{year:04d}-{month:02d}-01"
+    next_month = month + 1 if month < 12 else 1
+    next_year = year if month < 12 else year + 1
+    month_end = f"{next_year:04d}-{next_month:02d}-01"
+
+    income_minor = conn.execute(
+        "SELECT COALESCE(SUM(amount_minor),0) t FROM income WHERE user_id=? AND date>=? AND date<? AND is_deleted=0",
+        (user_id, month_start, month_end)).fetchone()["t"] or 0
+    expense_minor = conn.execute(
+        "SELECT COALESCE(SUM(amount_minor),0) t FROM expenses WHERE user_id=? AND date>=? AND date<? AND is_deleted=0",
+        (user_id, month_start, month_end)).fetchone()["t"] or 0
+    top_category = conn.execute(
+        "SELECT category, SUM(amount_minor) t FROM expenses WHERE user_id=? AND date>=? AND date<? AND is_deleted=0 "
+        "GROUP BY category ORDER BY t DESC LIMIT 1", (user_id, month_start, month_end)).fetchone()
+    highest_expense = conn.execute(
+        "SELECT category, amount_minor, description FROM expenses WHERE user_id=? AND date>=? AND date<? "
+        "AND is_deleted=0 AND amount_minor > 0 ORDER BY amount_minor DESC LIMIT 1",
+        (user_id, month_start, month_end)).fetchone()
+    nw = net_worth(conn, user_id)
+
+    savings_minor = income_minor - expense_minor
+    savings_rate = round(savings_minor / income_minor * 100, 1) if income_minor else 0
+
+    return {
+        "year": year, "month": month,
+        "income_minor": income_minor, "expense_minor": expense_minor,
+        "savings_minor": savings_minor, "savings_rate": savings_rate,
+        "top_category": top_category["category"] if top_category else None,
+        "highest_expense": dict(highest_expense) if highest_expense else None,
+        "net_worth_minor": nw["net_worth_minor"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Month-End Close (#79) - a checklist, not an accounting period lock.
+# ---------------------------------------------------------------------------
+def get_or_create_month_close(conn, user_id, year, month):
+    row = conn.execute(
+        "SELECT * FROM month_end_close WHERE user_id=? AND year=? AND month=?", (user_id, year, month)
+    ).fetchone()
+    if row:
+        return row
+    conn.execute(
+        "INSERT INTO month_end_close (user_id, year, month) VALUES (?, ?, ?)",
+        (user_id, year, month),
+    )
+    return conn.execute(
+        "SELECT * FROM month_end_close WHERE user_id=? AND year=? AND month=?", (user_id, year, month)
+    ).fetchone()
+
+
+def set_month_close_item(conn, user_id, year, month, field, value):
+    assert field in ("transactions_reviewed", "duplicates_checked", "budget_reviewed",
+                      "accounts_reconciled", "reports_generated")
+    conn.execute(
+        f"UPDATE month_end_close SET {field}=? WHERE user_id=? AND year=? AND month=?",
+        (1 if value else 0, user_id, year, month),
+    )
+    row = conn.execute(
+        "SELECT * FROM month_end_close WHERE user_id=? AND year=? AND month=?", (user_id, year, month)
+    ).fetchone()
+    all_done = all(row[f] for f in ("transactions_reviewed", "duplicates_checked", "budget_reviewed",
+                                     "accounts_reconciled", "reports_generated"))
+    if all_done and not row["closed_at"]:
+        conn.execute(
+            "UPDATE month_end_close SET closed_at=? WHERE user_id=? AND year=? AND month=?",
+            (now_iso(), user_id, year, month),
+        )
+    elif not all_done and row["closed_at"]:
+        conn.execute(
+            "UPDATE month_end_close SET closed_at=NULL WHERE user_id=? AND year=? AND month=?",
+            (user_id, year, month),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Financial Calendar (#25) - recurring bills, upcoming payments, goal
+# target dates within a month, built from data already on hand.
+# ---------------------------------------------------------------------------
+def calendar_events(conn, user_id, year, month):
+    month_start = f"{year:04d}-{month:02d}-01"
+    next_month = month + 1 if month < 12 else 1
+    next_year = year if month < 12 else year + 1
+    month_end = f"{next_year:04d}-{next_month:02d}-01"
+
+    events = []
+    for r in conn.execute(
+        "SELECT * FROM recurring_expenses WHERE user_id=? AND active=1 AND next_date>=? AND next_date<?",
+        (user_id, month_start, month_end)).fetchall():
+        events.append({"date": r["next_date"], "label": r["description"] or r["category"], "kind": "bill"})
+
+    for g in conn.execute(
+        "SELECT * FROM goals WHERE user_id=? AND status='active' AND target_date>=? AND target_date<?",
+        (user_id, month_start, month_end)).fetchall():
+        events.append({"date": g["target_date"], "label": f"Goal target: {g['name']}", "kind": "goal"})
+
+    for e in conn.execute(
+        "SELECT date, amount, description FROM expenses WHERE user_id=? AND date>=? AND date<? "
+        "AND is_deleted=0 AND amount_minor > 0 ORDER BY amount_minor DESC LIMIT 5",
+        (user_id, month_start, month_end)).fetchall():
+        events.append({"date": e["date"], "label": f"Large expense: {e['description'] or 'Untitled'}", "kind": "expense"})
+
+    return sorted(events, key=lambda e: e["date"])
+
+
+# ---------------------------------------------------------------------------
+# Demo Mode (#76) - a sandboxed demo account seeded with clearly fake data,
+# never mixed with a real user's account.
+# ---------------------------------------------------------------------------
+def create_demo_user(conn):
+    import uuid
+    from datetime import datetime
+    from werkzeug.security import generate_password_hash
+
+    token = uuid.uuid4().hex[:10]
+    email = f"demo-{token}@ledger.local"
+    password_hash = generate_password_hash(uuid.uuid4().hex)
+    cur = conn.execute(
+        "INSERT INTO users (name, email, password_hash, currency, is_demo, created_at) "
+        "VALUES (?, ?, ?, 'INR', 1, ?)",
+        ("Demo User", email, password_hash, now_iso()),
+    )
+    user_id = cur.lastrowid
+    conn.execute(
+        "INSERT INTO settings (user_id, currency, language, dark_mode) VALUES (?, 'INR', 'English', 0)",
+        (user_id,),
+    )
+
+    today = datetime.now()
+    demo_account_id = create_account(conn, user_id, "[DEMO] HDFC Bank", "Bank Account", "50000", "INR")
+    create_account(conn, user_id, "[DEMO] Cash", "Cash", "3000", "INR")
+
+    sample_expenses = [
+        ("Food", 450, "Groceries"), ("Transport", 200, "Cab ride"),
+        ("Entertainment", 600, "Movie night"), ("Food", 150, "Coffee"),
+        ("Utilities", 1200, "Electricity bill"),
+    ]
+    for i, (category, amount, desc) in enumerate(sample_expenses):
+        date = (today.replace(day=1)).strftime("%Y-%m-%d")
+        amount_minor = to_minor(amount)
+        conn.execute(
+            """INSERT INTO expenses (user_id, category, icon, amount, amount_minor, description, date,
+               payment_mode, currency, txn_type, created_at)
+               VALUES (?, ?, 'fa-receipt', ?, ?, ?, ?, 'UPI', 'INR', 'expense', ?)""",
+            (user_id, category, amount, amount_minor, f"[DEMO] {desc}", date, now_iso()),
+        )
+    conn.execute(
+        """INSERT INTO income (user_id, source, amount, amount_minor, description, date, currency, created_at)
+           VALUES (?, 'Salary', 45000, 4500000, '[DEMO] Monthly salary', ?, 'INR', ?)""",
+        (user_id, today.replace(day=1).strftime("%Y-%m-%d"), now_iso()),
+    )
+    conn.commit()
+    return user_id, email

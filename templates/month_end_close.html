@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Month-End Close — Ledger{% endblock %}
+{% block page_title %}Month-End Close{% endblock %}
+{% block page_subtitle %}{{ month_name }} {{ year }}{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width:520px;">
+  {% set items = [
+    ("transactions_reviewed", "Transactions reviewed"),
+    ("duplicates_checked", "Duplicate check run"),
+    ("budget_reviewed", "Budget reviewed"),
+    ("accounts_reconciled", "Accounts reconciled"),
+    ("reports_generated", "Reports generated"),
+  ] %}
+  {% for field, label in items %}
+    <form method="POST" action="{{ url_for('month_end_close_toggle') }}" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="year" value="{{ year }}">
+      <input type="hidden" name="month" value="{{ month }}">
+      <input type="hidden" name="field" value="{{ field }}">
+      <input type="hidden" name="value" value="{{ 0 if close[field] else 1 }}">
+      <button type="submit" style="border:0;background:none;cursor:pointer;font-size:16px;color: {{ 'var(--ledger-green)' if close[field] else 'var(--text-muted)' }};">
+        <i class="fa-solid {{ 'fa-circle-check' if close[field] else 'fa-circle' }}"></i>
+      </button>
+      <span>{{ label }}</span>
+    </form>
+  {% endfor %}
+
+  <div style="margin-top:18px;">
+    {% if close['closed_at'] %}
+      <p style="color:var(--ledger-green);font-weight:600;">Month Ready for Review — closed {{ close['closed_at'] }}</p>
+    {% else %}
+      <p style="color:var(--text-muted);font-size:13px;">Complete all items above to close out {{ month_name }}.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

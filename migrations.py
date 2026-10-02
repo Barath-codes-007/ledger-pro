@@ -179,6 +179,13 @@ def _m007_month_end_close(conn):
         """)
 
 
+def _m008_demo_mode(conn):
+    """Flag demo accounts so their data is clearly marked and can never be
+    confused with a real user's data (see #76)."""
+    if "is_demo" not in _cols(conn, "users"):
+        conn.execute("ALTER TABLE users ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0")
+
+
 MIGRATIONS = [
     (1, "transaction currency", _m001_transaction_currency),
     (2, "transaction types: refund/reversal/split/adjustment", _m002_transaction_types),
@@ -187,6 +194,7 @@ MIGRATIONS = [
     (5, "pinned items", _m005_pinned_items),
     (6, "import batches", _m006_import_batches),
     (7, "month-end close checklist", _m007_month_end_close),
+    (8, "demo mode flag", _m008_demo_mode),
 ]
 
 

@@ -37,6 +37,12 @@
   {% endwith %}
 </div>
 
+{% if current_user and current_user['is_demo'] %}
+<div style="background:var(--ledger-gold,#b45309);color:#fff;text-align:center;padding:8px;font-size:13px;font-weight:600;letter-spacing:.03em;">
+  DEMO MODE — this account and all its data are temporary sample data, clearly marked [DEMO]
+</div>
+{% endif %}
+
 <div class="app-shell">
   <aside class="sidebar">
     <div class="sidebar-brand">
@@ -58,6 +64,9 @@
       <a href="{{ url_for('statements') }}" class="{{ 'active' if request.endpoint == 'statements' }}"><i class="fa-solid fa-file-invoice-dollar"></i> Statements</a>
       <a href="{{ url_for('analytics_page') }}" class="{{ 'active' if request.endpoint == 'analytics_page' }}"><i class="fa-solid fa-chart-line"></i> Analytics</a>
       <a href="{{ url_for('import_page') }}" class="{{ 'active' if request.endpoint in ('import_page','import_preview','import_confirm') }}"><i class="fa-solid fa-file-import"></i> Import</a>
+      <a href="{{ url_for('calendar_page') }}" class="{{ 'active' if request.endpoint == 'calendar_page' }}"><i class="fa-solid fa-calendar-days"></i> Calendar</a>
+      <a href="{{ url_for('snapshot_page') }}" class="{{ 'active' if request.endpoint == 'snapshot_page' }}"><i class="fa-solid fa-camera"></i> Snapshot</a>
+      <a href="{{ url_for('month_end_close_page') }}" class="{{ 'active' if request.endpoint == 'month_end_close_page' }}"><i class="fa-solid fa-clipboard-check"></i> Month-End Close</a>
       <a href="{{ url_for('subscriptions') }}" class="{{ 'active' if request.endpoint == 'subscriptions' }}"><i class="fa-solid fa-rotate"></i> Subscriptions</a>
 
       <div class="nav-label">Data</div>

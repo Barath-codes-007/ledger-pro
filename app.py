@@ -1507,6 +1507,82 @@ def import_confirm():
     return redirect(url_for("expenses"))
 
 
+@app.route("/snapshot")
+@login_required
+def snapshot_page():
+    uid = session["user_id"]
+    today = datetime.now()
+    year = request.args.get("year", today.year, type=int)
+    month = request.args.get("month", today.month, type=int)
+    conn = get_db_connection()
+    snap = services.financial_snapshot(conn, uid, year, month)
+    conn.close()
+    return render_template("snapshot.html", snap=snap, to_major=to_major,
+                            month_name=calendar.month_name[month])
+
+
+@app.route("/month-end-close")
+@login_required
+def month_end_close_page():
+    uid = session["user_id"]
+    today = datetime.now()
+    year = request.args.get("year", today.year, type=int)
+    month = request.args.get("month", today.month, type=int)
+    conn = get_db_connection()
+    close = services.get_or_create_month_close(conn, uid, year, month)
+    conn.commit()
+    conn.close()
+    return render_template("month_end_close.html", close=close, year=year, month=month,
+                            month_name=calendar.month_name[month])
+
+
+@app.route("/month-end-close/toggle", methods=["POST"])
+@login_required
+def month_end_close_toggle():
+    uid = session["user_id"]
+    year = request.form.get("year", type=int)
+    month = request.form.get("month", type=int)
+    field = request.form.get("field")
+    value = request.form.get("value") == "1"
+    conn = get_db_connection()
+    try:
+        services.get_or_create_month_close(conn, uid, year, month)
+        services.set_month_close_item(conn, uid, year, month, field, value)
+        conn.commit()
+    except AssertionError:
+        abort(400)
+    finally:
+        conn.close()
+    return redirect(url_for("month_end_close_page", year=year, month=month))
+
+
+@app.route("/calendar")
+@login_required
+def calendar_page():
+    uid = session["user_id"]
+    today = datetime.now()
+    year = request.args.get("year", today.year, type=int)
+    month = request.args.get("month", today.month, type=int)
+    conn = get_db_connection()
+    events = services.calendar_events(conn, uid, year, month)
+    conn.close()
+    return render_template("calendar.html", events=events, year=year, month=month,
+                            month_name=calendar.month_name[month])
+
+
+@app.route("/demo/start")
+def start_demo():
+    conn = get_db_connection()
+    user_id, email = services.create_demo_user(conn)
+    conn.close()
+    session.clear()
+    session.permanent = True
+    session["user_id"] = user_id
+    session["user_name"] = "Demo User"
+    flash("Welcome to the Ledger demo — this account is seeded with sample data clearly marked [DEMO].", "success")
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/analytics")
 @login_required
 def analytics_page():

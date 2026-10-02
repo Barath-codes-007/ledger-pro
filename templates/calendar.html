@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Calendar — Ledger{% endblock %}
+{% block page_title %}Financial Calendar{% endblock %}
+{% block page_subtitle %}{{ month_name }} {{ year }}{% endblock %}
+
+{% block content %}
+<div class="panel" style="margin-bottom:16px;">
+  <form method="GET" action="{{ url_for('calendar_page') }}" style="display:flex;gap:10px;align-items:flex-end;">
+    <div class="field">
+      <label for="month">Month</label>
+      <select id="month" name="month">
+        {% for i in range(1, 13) %}<option value="{{ i }}" {{ 'selected' if i == month }}>{{ i }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="year">Year</label>
+      <input type="number" id="year" name="year" value="{{ year }}" style="width:100px;">
+    </div>
+    <button type="submit" class="btn btn-accent">View</button>
+  </form>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><h3>Upcoming bills, goal dates and large expenses</h3></div>
+  {% if events %}
+    <table class="table">
+      <thead><tr><th>Date</th><th>Event</th><th>Type</th></tr></thead>
+      <tbody>
+      {% for e in events %}
+        <tr>
+          <td class="mono">{{ e['date'] }}</td>
+          <td>{{ e['label'] }}</td>
+          <td><span class="chip chip-gray" style="font-size:10px;">{{ e['kind']|capitalize }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p style="color:var(--text-muted);font-size:13px;">Nothing scheduled this month.</p>
+  {% endif %}
+</div>
+{% endblock %}
