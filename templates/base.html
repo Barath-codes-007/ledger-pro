@@ -140,6 +140,13 @@
     subscriptions: "{{ url_for('subscriptions') }}",
   };
 </script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register("{{ url_for('service_worker') }}").catch(function () {});
+    });
+  }
+</script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
 {% block extra_scripts %}{% endblock %}

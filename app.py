@@ -2194,6 +2194,14 @@ def receipt(expense_id):
     )
 
 
+@app.route("/sw.js")
+def service_worker():
+    # Served from the root path (not /static/sw.js) so its default scope
+    # covers the whole app, letting it provide the offline fallback page
+    # for any route, not just assets under /static/.
+    return send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
+
+
 @app.route("/health")
 def health():
     try:
