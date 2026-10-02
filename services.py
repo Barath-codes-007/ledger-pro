@@ -794,3 +794,102 @@ def create_demo_user(conn):
     )
     conn.commit()
     return user_id, email
+
+
+# ---------------------------------------------------------------------------
+# Smart search query parsing (#81) - turns a free-text query into filters
+# without a heavy NLP parser. Unrecognized tokens fall back to a LIKE
+# search against category/description/merchant.
+# ---------------------------------------------------------------------------
+_MONTH_NAMES = {
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+}
+_KNOWN_PAYMENT_MODES = {"cash", "upi", "card", "credit card", "debit card", "netbanking", "auto"}
+
+
+def parse_search_query(query, known_categories):
+    """
+    Returns a dict of filters: {category, min_amount, max_amount, month,
+    year, payment_mode, free_text}. known_categories lets category tokens
+    match case-insensitively without hard-coding the category list here.
+    """
+    import re
+    filters = {"category": None, "min_amount": None, "max_amount": None,
+               "month": None, "year": None, "payment_mode": None, "free_text": []}
+    cat_lookup = {c.lower(): c for c in known_categories}
+
+    tokens = query.split()
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        low = tok.lower()
+
+        amount_match = re.match(r'^([<>])\s*(\d+(?:\.\d+)?)$', tok)
+        if amount_match:
+            op, value = amount_match.groups()
+            if op == ">":
+                filters["min_amount"] = float(value)
+            else:
+                filters["max_amount"] = float(value)
+            i += 1
+            continue
+        if tok in (">", "<") and i + 1 < len(tokens) and re.match(r'^\d+(\.\d+)?$', tokens[i + 1]):
+            value = float(tokens[i + 1])
+            if tok == ">":
+                filters["min_amount"] = value
+            else:
+                filters["max_amount"] = value
+            i += 2
+            continue
+
+        if low in _MONTH_NAMES:
+            filters["month"] = _MONTH_NAMES[low]
+            i += 1
+            continue
+
+        if re.match(r'^(19|20)\d{2}$', tok):
+            filters["year"] = int(tok)
+            i += 1
+            continue
+
+        if low in _KNOWN_PAYMENT_MODES:
+            filters["payment_mode"] = tok
+            i += 1
+            continue
+
+        if low in cat_lookup:
+            filters["category"] = cat_lookup[low]
+            i += 1
+            continue
+
+        filters["free_text"].append(tok)
+        i += 1
+
+    return filters
+
+
+def search_expenses(conn, user_id, query, known_categories, limit=20):
+    filters = parse_search_query(query, known_categories)
+    sql = "SELECT * FROM expenses WHERE user_id=? AND is_deleted=0"
+    params = [user_id]
+
+    if filters["category"]:
+        sql += " AND category=?"; params.append(filters["category"])
+    if filters["min_amount"] is not None:
+        sql += " AND amount > ?"; params.append(filters["min_amount"])
+    if filters["max_amount"] is not None:
+        sql += " AND amount < ?"; params.append(filters["max_amount"])
+    if filters["month"]:
+        sql += " AND CAST(strftime('%m', date) AS INTEGER) = ?"; params.append(filters["month"])
+    if filters["year"]:
+        sql += " AND strftime('%Y', date) = ?"; params.append(str(filters["year"]))
+    if filters["payment_mode"]:
+        sql += " AND payment_mode LIKE ?"; params.append(f"%{filters['payment_mode']}%")
+    for word in filters["free_text"]:
+        sql += " AND (description LIKE ? OR merchant LIKE ? OR category LIKE ?)"
+        params += [f"%{word}%", f"%{word}%", f"%{word}%"]
+
+    sql += " ORDER BY date DESC LIMIT ?"
+    params.append(limit)
+    return conn.execute(sql, params).fetchall(), filters

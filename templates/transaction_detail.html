@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Transaction — Ledger{% endblock %}
+{% block page_title %}Transaction Detail{% endblock %}
+{% block page_subtitle %}{{ e['category'] }} on {{ e['date'] }}{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width:520px;">
+  <div style="font-size:28px;font-weight:700;margin-bottom:4px;{{ 'color:var(--ledger-green);' if e['amount'] < 0 else '' }}">
+    {{ '+' if e['amount'] < 0 else '-' }}{{ currency_symbol }}{{ '%.2f'|format(e['amount']|abs) }}
+  </div>
+  {% if e['txn_type'] and e['txn_type'] != 'expense' %}
+    <span class="chip chip-gray" style="margin-bottom:10px;display:inline-block;">{{ e['txn_type']|replace('_',' ')|capitalize }}</span>
+  {% endif %}
+
+  <table class="table" style="margin-top:10px;">
+    <tbody>
+      <tr><td>Category</td><td>{{ e['category'] }}{% if e['custom_category'] %} ({{ e['custom_category'] }}){% endif %}</td></tr>
+      <tr><td>Date</td><td>{{ e['date'] }}</td></tr>
+      <tr><td>Payment Mode</td><td>{{ e['payment_mode'] }}</td></tr>
+      <tr><td>Account</td><td>{{ account['name'] if account else '—' }}</td></tr>
+      <tr><td>Merchant</td><td>{{ e['merchant'] or '—' }}</td></tr>
+      <tr><td>Currency</td><td>{{ e['currency'] }}</td></tr>
+      <tr><td>Description</td><td>{{ e['description'] or '—' }}</td></tr>
+      <tr><td>Receipt</td><td>{% if e['receipt_path'] %}<a href="{{ url_for('receipt', expense_id=e['id']) }}">View attached receipt</a>{% else %}Not attached{% endif %}</td></tr>
+      <tr><td>Created</td><td>{{ e['created_at'] }}</td></tr>
+      {% if e['refund_for_id'] %}<tr><td>Refund for</td><td><a href="{{ url_for('view_expense', expense_id=e['refund_for_id']) }}">Transaction #{{ e['refund_for_id'] }}</a></td></tr>{% endif %}
+      {% if e['reverses_id'] %}<tr><td>Reverses</td><td><a href="{{ url_for('view_expense', expense_id=e['reverses_id']) }}">Transaction #{{ e['reverses_id'] }}</a></td></tr>{% endif %}
+      {% if e['reversed_by_id'] %}<tr><td>Reversed by</td><td><a href="{{ url_for('view_expense', expense_id=e['reversed_by_id']) }}">Transaction #{{ e['reversed_by_id'] }}</a></td></tr>{% endif %}
+    </tbody>
+  </table>
+
+  {% if related %}
+    <div style="margin-top:16px;">
+      <h4 style="font-size:13px;margin-bottom:8px;">Other parts of this split</h4>
+      <table class="table">
+        <tbody>
+        {% for r in related %}
+          <tr><td>{{ r['category'] }}</td><td class="mono">{{ currency_symbol }}{{ '%.2f'|format(r['amount']) }}</td>
+              <td><a href="{{ url_for('view_expense', expense_id=r['id']) }}">View</a></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  <div style="margin-top:16px;">
+    <a href="{{ url_for('edit_expense', expense_id=e['id']) }}" class="chip chip-gray">Edit</a>
+    <a href="{{ url_for('expenses') }}" class="chip chip-gray">Back to Expenses</a>
+  </div>
+</div>
+{% endblock %}

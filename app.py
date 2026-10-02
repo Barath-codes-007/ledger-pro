@@ -333,10 +333,19 @@ def dashboard():
     cf = services.cash_flow(conn, uid, month_start, today_str)
     conn.commit()
 
+    pinned = conn.execute(
+        "SELECT * FROM pinned_items WHERE user_id=? ORDER BY created_at DESC", (uid,)
+    ).fetchall()
+    recent_activity = conn.execute(
+        "SELECT * FROM audit_log WHERE user_id=? ORDER BY id DESC LIMIT 8", (uid,)
+    ).fetchall()
+
     conn.close()
 
     return render_template(
         "dashboard.html",
+        pinned=pinned,
+        recent_activity=recent_activity,
         total_income=total_income,
         total_expense=total_expense,
         balance=balance,
@@ -1267,13 +1276,9 @@ def api_search():
     conn = get_db_connection()
     results = []
     if q:
-        rows = conn.execute(
-            """SELECT id, category, description, amount, date FROM expenses
-               WHERE user_id = ? AND (category LIKE ? OR description LIKE ? OR CAST(amount AS TEXT) LIKE ?)
-               ORDER BY date DESC LIMIT 10""",
-            (uid, f"%{q}%", f"%{q}%", f"%{q}%")
-        ).fetchall()
-        results = [dict(r) for r in rows]
+        rows, _filters = services.search_expenses(conn, uid, q, list(CATEGORY_ICONS.keys()), limit=10)
+        results = [{"id": r["id"], "category": r["category"], "description": r["description"],
+                    "amount": r["amount"], "date": r["date"]} for r in rows]
     conn.close()
     return jsonify(results)
 
@@ -1369,9 +1374,11 @@ def accounts():
 
     rows = conn.execute("SELECT * FROM accounts WHERE user_id=? AND status='active' ORDER BY created_at", (uid,)).fetchall()
     symbol = get_user_currency_symbol(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
+    pinned_account_keys = [r["item_key"] for r in conn.execute(
+        "SELECT item_key FROM pinned_items WHERE user_id=? AND item_type='account'", (uid,)).fetchall()]
     conn.close()
     return render_template("accounts.html", accounts=rows, account_types=services.ACCOUNT_TYPES,
-                            currency_symbol=symbol, to_major=to_major)
+                            currency_symbol=symbol, to_major=to_major, pinned_account_keys=pinned_account_keys)
 
 
 @app.route("/accounts/archive/<int:account_id>", methods=["POST"])
@@ -1505,6 +1512,57 @@ def import_confirm():
     flash(f"Imported {result['imported']} transaction(s). "
           f"{result['skipped']} skipped, {result['duplicate']} possible duplicate(s) flagged.", "success")
     return redirect(url_for("expenses"))
+
+
+@app.route("/expenses/<int:expense_id>/view")
+@login_required
+def view_expense(expense_id):
+    uid = session["user_id"]
+    conn = get_db_connection()
+    expense = conn.execute("SELECT * FROM expenses WHERE id=? AND user_id=?", (expense_id, uid)).fetchone()
+    if not expense:
+        conn.close()
+        abort(404)
+    account = None
+    if expense["account_id"]:
+        account = conn.execute("SELECT name FROM accounts WHERE id=?", (expense["account_id"],)).fetchone()
+    related = []
+    if expense["split_group_id"]:
+        related = conn.execute(
+            "SELECT * FROM expenses WHERE split_group_id=? AND id!=? ORDER BY id",
+            (expense["split_group_id"], expense_id)).fetchall()
+    conn.close()
+    return render_template("transaction_detail.html", e=expense, account=account, related=related)
+
+
+@app.route("/pin/<item_type>/<path:item_key>", methods=["POST"])
+@login_required
+def pin_item(item_type, item_key):
+    uid = session["user_id"]
+    label = request.form.get("label", item_key)
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "INSERT INTO pinned_items (user_id, item_type, item_key, label, created_at) VALUES (?, ?, ?, ?, ?)",
+            (uid, item_type, item_key, label, now_iso()),
+        )
+        conn.commit()
+    except Exception:
+        pass  # already pinned - UNIQUE constraint, nothing to do
+    conn.close()
+    return redirect(request.referrer or url_for("dashboard"))
+
+
+@app.route("/unpin/<item_type>/<path:item_key>", methods=["POST"])
+@login_required
+def unpin_item(item_type, item_key):
+    uid = session["user_id"]
+    conn = get_db_connection()
+    conn.execute("DELETE FROM pinned_items WHERE user_id=? AND item_type=? AND item_key=?",
+                 (uid, item_type, item_key))
+    conn.commit()
+    conn.close()
+    return redirect(request.referrer or url_for("dashboard"))
 
 
 @app.route("/snapshot")

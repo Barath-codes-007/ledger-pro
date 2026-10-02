@@ -20,6 +20,19 @@
                 {{ currency_symbol }}{{ '%.2f'|format(to_major(a['balance_minor'])) }}
               </td>
               <td>
+                {% set pinned_keys = pinned_account_keys or [] %}
+                {% if a['id']|string in pinned_keys %}
+                <form method="POST" action="{{ url_for('unpin_item', item_type='account', item_key=a['id']) }}" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="chip chip-gray" style="border:0;cursor:pointer;margin-right:6px;" title="Unpin"><i class="fa-solid fa-star" style="color:var(--ledger-gold,#b45309);"></i></button>
+                </form>
+                {% else %}
+                <form method="POST" action="{{ url_for('pin_item', item_type='account', item_key=a['id']) }}" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="label" value="{{ a['name'] }}">
+                  <button type="submit" class="chip chip-gray" style="border:0;cursor:pointer;margin-right:6px;" title="Pin"><i class="fa-regular fa-star"></i></button>
+                </form>
+                {% endif %}
                 <a href="{{ url_for('reconcile_account', account_id=a['id']) }}" class="chip chip-gray" style="margin-right:6px;">Reconcile</a>
                 <form method="POST" action="{{ url_for('archive_account_route', account_id=a['id']) }}" data-confirm="Archive this account? It will be hidden from your account list." style="display:inline;">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
