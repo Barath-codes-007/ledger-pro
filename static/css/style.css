@@ -205,12 +205,12 @@ h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; letter-spac
 .search-results .sr-item:last-child { border: none; }
 .search-results .sr-empty { padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
 
-.theme-toggle {
+.theme-toggle, .icon-btn {
   width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border);
   background: var(--surface); display: flex; align-items: center; justify-content: center;
   font-size: 15px; transition: all var(--transition);
 }
-.theme-toggle:hover { border-color: var(--ledger-green); color: var(--ledger-green); }
+.theme-toggle:hover, .icon-btn:hover { border-color: var(--ledger-green); color: var(--ledger-green); }
 
 .page-body { padding: 28px 32px 60px; flex: 1; }
 
