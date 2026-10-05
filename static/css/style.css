@@ -210,7 +210,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; letter-spac
   background: var(--surface); display: flex; align-items: center; justify-content: center;
   font-size: 15px; transition: all var(--transition);
 }
-.theme-toggle:hover, .icon-btn:hover { border-color: var(--ledger-green); color: var(--ledger-green); }
+.theme-toggle:hover, .icon-btn:hover { border-color: var(--ledger-green); }
 
 .page-body { padding: 28px 32px 60px; flex: 1; }
 

@@ -30,6 +30,7 @@ import services
 import repositories
 import imports
 import copilot
+import translations
 from money import to_minor, to_major, format_amount
 
 # ---------------------------------------------------------------------------
@@ -82,7 +83,7 @@ CATEGORY_ICONS = {
 }
 PAYMENT_MODES = ["Cash", "Credit Card", "Debit Card", "UPI", "Net Banking", "Wallet"]
 CURRENCIES = {"USD": "$", "EUR": "€", "GBP": "£", "INR": "₹", "JPY": "¥", "AUD": "A$", "CAD": "C$"}
-LANGUAGES = ["English", "Spanish", "French", "German", "Hindi"]
+LANGUAGES = ["English", "Spanish", "French", "German", "Hindi", "Tamil"]
 
 
 def client_ip():
@@ -156,6 +157,7 @@ def inject_globals():
         currency_symbol=get_user_currency_symbol(user),
         user_currency=(user["currency"] if user else DEFAULT_CURRENCY),
         unread_notifications=_unread_count_for_nav(),
+        t=lambda key: translations.translate(key, user["language"] if user else "English"),
         csrf_token=lambda: security.get_csrf_token(session),
         category_icons=CATEGORY_ICONS,
         payment_modes=PAYMENT_MODES,

@@ -7,7 +7,7 @@
 <div class="grid grid-4">
   <div class="stat-card tone-ink">
     <div class="stat-top">
-      <div><div class="stat-label">Net Worth</div></div>
+      <div><div class="stat-label">{{ t('dash_net_worth') }}</div></div>
       <div class="stat-icon"><i class="fa-solid fa-scale-balanced"></i></div>
     </div>
     <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(net_worth) }}</div>
@@ -15,7 +15,7 @@
   </div>
   <div class="stat-card tone-green">
     <div class="stat-top">
-      <div><div class="stat-label">Cash Flow (this month)</div></div>
+      <div><div class="stat-label">{{ t('dash_cash_flow') }}</div></div>
       <div class="stat-icon"><i class="fa-solid fa-right-left"></i></div>
     </div>
     <div class="stat-value mono">{{ currency_symbol }}{{ '%.2f'|format(cash_flow_month) }}</div>
@@ -23,7 +23,7 @@
   </div>
   <div class="stat-card tone-gold">
     <div class="stat-top">
-      <div><div class="stat-label">Savings Rate</div></div>
+      <div><div class="stat-label">{{ t('dash_savings_rate') }}</div></div>
       <div class="stat-icon"><i class="fa-solid fa-percent"></i></div>
     </div>
     <div class="stat-value mono">{{ savings_rate }}%</div>
@@ -31,7 +31,7 @@
   </div>
   <div class="stat-card tone-red">
     <div class="stat-top">
-      <div><div class="stat-label">Quick Links</div></div>
+      <div><div class="stat-label">{{ t('dash_quick_links') }}</div></div>
       <div class="stat-icon"><i class="fa-solid fa-bolt"></i></div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
@@ -160,8 +160,8 @@
 
     <div class="panel" style="margin-top:20px;">
       <div class="panel-head">
-        <h3>Recent transactions</h3>
-        <a href="{{ url_for('expenses') }}" class="link">View all</a>
+        <h3>{{ t('dash_recent_transactions') }}</h3>
+        <a href="{{ url_for('expenses') }}" class="link">{{ t('dash_view_all') }}</a>
       </div>
       {% if recent %}
         {% for e in recent %}
@@ -186,8 +186,8 @@
 
     <div class="panel" style="margin-top:20px;">
       <div class="panel-head">
-        <h3>Recent activity</h3>
-        <a href="{{ url_for('audit_log_page') }}" class="link">View all</a>
+        <h3>{{ t('dash_recent_activity') }}</h3>
+        <a href="{{ url_for('audit_log_page') }}" class="link">{{ t('dash_view_all') }}</a>
       </div>
       {% if recent_activity %}
         {% for a in recent_activity %}

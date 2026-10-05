@@ -51,33 +51,33 @@
       <span class="name">Ledger</span>
     </div>
     <nav class="sidebar-nav">
-      <div class="nav-label">Overview</div>
-      <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint == 'dashboard' }}"><i class="fa-solid fa-grip"></i> Dashboard</a>
-      <a href="{{ url_for('reports') }}" class="{{ 'active' if request.endpoint == 'reports' }}"><i class="fa-solid fa-chart-pie"></i> Analytics &amp; Reports</a>
+      <div class="nav-label">{{ t('nav_overview') }}</div>
+      <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint == 'dashboard' }}"><i class="fa-solid fa-grip"></i> {{ t('nav_dashboard') }}</a>
+      <a href="{{ url_for('reports') }}" class="{{ 'active' if request.endpoint == 'reports' }}"><i class="fa-solid fa-chart-pie"></i> {{ t('nav_analytics_reports') }}</a>
 
-      <div class="nav-label">Money</div>
-      <a href="{{ url_for('expenses') }}" class="{{ 'active' if request.endpoint in ['expenses','add_expense','edit_expense'] }}"><i class="fa-solid fa-arrow-trend-down"></i> Expenses</a>
-      <a href="{{ url_for('income') }}" class="{{ 'active' if request.endpoint in ['income','add_income','edit_income'] }}"><i class="fa-solid fa-arrow-trend-up"></i> Income</a>
-      <a href="{{ url_for('budget') }}" class="{{ 'active' if request.endpoint == 'budget' }}"><i class="fa-solid fa-piggy-bank"></i> Budget</a>
-      <a href="{{ url_for('goals') }}" class="{{ 'active' if request.endpoint == 'goals' }}"><i class="fa-solid fa-bullseye"></i> Goals</a>
-      <a href="{{ url_for('accounts') }}" class="{{ 'active' if request.endpoint == 'accounts' }}"><i class="fa-solid fa-building-columns"></i> Accounts &amp; Transfers</a>
-      <a href="{{ url_for('net_worth_page') }}" class="{{ 'active' if request.endpoint == 'net_worth_page' }}"><i class="fa-solid fa-scale-balanced"></i> Net Worth</a>
-      <a href="{{ url_for('statements') }}" class="{{ 'active' if request.endpoint == 'statements' }}"><i class="fa-solid fa-file-invoice-dollar"></i> Statements</a>
-      <a href="{{ url_for('analytics_page') }}" class="{{ 'active' if request.endpoint == 'analytics_page' }}"><i class="fa-solid fa-chart-line"></i> Analytics</a>
-      <a href="{{ url_for('copilot_page') }}" class="{{ 'active' if request.endpoint == 'copilot_page' }}"><i class="fa-solid fa-comment-dollar"></i> Copilot</a>
-      <a href="{{ url_for('import_page') }}" class="{{ 'active' if request.endpoint in ('import_page','import_preview','import_confirm') }}"><i class="fa-solid fa-file-import"></i> Import</a>
-      <a href="{{ url_for('calendar_page') }}" class="{{ 'active' if request.endpoint == 'calendar_page' }}"><i class="fa-solid fa-calendar-days"></i> Calendar</a>
-      <a href="{{ url_for('snapshot_page') }}" class="{{ 'active' if request.endpoint == 'snapshot_page' }}"><i class="fa-solid fa-camera"></i> Snapshot</a>
-      <a href="{{ url_for('month_end_close_page') }}" class="{{ 'active' if request.endpoint == 'month_end_close_page' }}"><i class="fa-solid fa-clipboard-check"></i> Month-End Close</a>
-      <a href="{{ url_for('subscriptions') }}" class="{{ 'active' if request.endpoint == 'subscriptions' }}"><i class="fa-solid fa-rotate"></i> Subscriptions</a>
+      <div class="nav-label">{{ t('nav_money') }}</div>
+      <a href="{{ url_for('expenses') }}" class="{{ 'active' if request.endpoint in ['expenses','add_expense','edit_expense'] }}"><i class="fa-solid fa-arrow-trend-down"></i> {{ t('nav_expenses') }}</a>
+      <a href="{{ url_for('income') }}" class="{{ 'active' if request.endpoint in ['income','add_income','edit_income'] }}"><i class="fa-solid fa-arrow-trend-up"></i> {{ t('nav_income') }}</a>
+      <a href="{{ url_for('budget') }}" class="{{ 'active' if request.endpoint == 'budget' }}"><i class="fa-solid fa-piggy-bank"></i> {{ t('nav_budget') }}</a>
+      <a href="{{ url_for('goals') }}" class="{{ 'active' if request.endpoint == 'goals' }}"><i class="fa-solid fa-bullseye"></i> {{ t('nav_goals') }}</a>
+      <a href="{{ url_for('accounts') }}" class="{{ 'active' if request.endpoint == 'accounts' }}"><i class="fa-solid fa-building-columns"></i> {{ t('nav_accounts') }}</a>
+      <a href="{{ url_for('net_worth_page') }}" class="{{ 'active' if request.endpoint == 'net_worth_page' }}"><i class="fa-solid fa-scale-balanced"></i> {{ t('nav_net_worth') }}</a>
+      <a href="{{ url_for('statements') }}" class="{{ 'active' if request.endpoint == 'statements' }}"><i class="fa-solid fa-file-invoice-dollar"></i> {{ t('nav_statements') }}</a>
+      <a href="{{ url_for('analytics_page') }}" class="{{ 'active' if request.endpoint == 'analytics_page' }}"><i class="fa-solid fa-chart-line"></i> {{ t('nav_analytics') }}</a>
+      <a href="{{ url_for('copilot_page') }}" class="{{ 'active' if request.endpoint == 'copilot_page' }}"><i class="fa-solid fa-comment-dollar"></i> {{ t('nav_copilot') }}</a>
+      <a href="{{ url_for('import_page') }}" class="{{ 'active' if request.endpoint in ('import_page','import_preview','import_confirm') }}"><i class="fa-solid fa-file-import"></i> {{ t('nav_import') }}</a>
+      <a href="{{ url_for('calendar_page') }}" class="{{ 'active' if request.endpoint == 'calendar_page' }}"><i class="fa-solid fa-calendar-days"></i> {{ t('nav_calendar') }}</a>
+      <a href="{{ url_for('snapshot_page') }}" class="{{ 'active' if request.endpoint == 'snapshot_page' }}"><i class="fa-solid fa-camera"></i> {{ t('nav_snapshot') }}</a>
+      <a href="{{ url_for('month_end_close_page') }}" class="{{ 'active' if request.endpoint == 'month_end_close_page' }}"><i class="fa-solid fa-clipboard-check"></i> {{ t('nav_month_end_close') }}</a>
+      <a href="{{ url_for('subscriptions') }}" class="{{ 'active' if request.endpoint == 'subscriptions' }}"><i class="fa-solid fa-rotate"></i> {{ t('nav_subscriptions') }}</a>
 
-      <div class="nav-label">Data</div>
-      <a href="{{ url_for('data_quality') }}" class="{{ 'active' if request.endpoint == 'data_quality' }}"><i class="fa-solid fa-broom"></i> Data Quality</a>
-      <a href="{{ url_for('audit_log_page') }}" class="{{ 'active' if request.endpoint == 'audit_log_page' }}"><i class="fa-solid fa-clock-rotate-left"></i> Audit Log</a>
+      <div class="nav-label">{{ t('nav_data') }}</div>
+      <a href="{{ url_for('data_quality') }}" class="{{ 'active' if request.endpoint == 'data_quality' }}"><i class="fa-solid fa-broom"></i> {{ t('nav_data_quality') }}</a>
+      <a href="{{ url_for('audit_log_page') }}" class="{{ 'active' if request.endpoint == 'audit_log_page' }}"><i class="fa-solid fa-clock-rotate-left"></i> {{ t('nav_audit_log') }}</a>
 
-      <div class="nav-label">Account</div>
-      <a href="{{ url_for('profile') }}" class="{{ 'active' if request.endpoint == 'profile' }}"><i class="fa-solid fa-user"></i> Profile</a>
-      <a href="{{ url_for('settings') }}" class="{{ 'active' if request.endpoint == 'settings' }}"><i class="fa-solid fa-gear"></i> Settings</a>
+      <div class="nav-label">{{ t('nav_account_group') }}</div>
+      <a href="{{ url_for('profile') }}" class="{{ 'active' if request.endpoint == 'profile' }}"><i class="fa-solid fa-user"></i> {{ t('nav_profile') }}</a>
+      <a href="{{ url_for('settings') }}" class="{{ 'active' if request.endpoint == 'settings' }}"><i class="fa-solid fa-gear"></i> {{ t('nav_settings') }}</a>
     </nav>
     <div class="sidebar-footer">
       <div class="user-chip">
@@ -106,8 +106,8 @@
       <div class="topbar-actions">
         <div class="search-box" role="search">
           <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-          <label for="globalSearch" class="sr-only">Search transactions</label>
-          <input type="text" id="globalSearch" placeholder="Search transactions..." aria-label="Search transactions">
+          <label for="globalSearch" class="sr-only">{{ t('search_placeholder') }}</label>
+          <input type="text" id="globalSearch" placeholder="{{ t('search_placeholder') }}" aria-label="{{ t('search_placeholder') }}">
           <div class="search-results" id="searchResults" role="listbox" aria-label="Search results"></div>
         </div>
         <a href="{{ url_for('notifications_page') }}" class="icon-btn" aria-label="Notifications" style="position:relative;text-decoration:none;">
