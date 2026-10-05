@@ -179,6 +179,16 @@ pytest -q
 This was never actually deployed to Render from this environment — see
 QA_CHECKLIST.md for exactly what is and isn't verified.
 
+# LEDGER
+
+> **Professional Personal Finance & Financial Intelligence Platform**  
+> *Developed by Barath*
+
+🔗 **Live Demo:** [https://eco-ledger-j5i9.onrender.com](https://eco-ledger-j5i9.onrender.com)  
+💻 **Repository:** [https://github.com/Barath-codes-007/ledger-pro](https://github.com/Barath-codes-007/ledger-pro)
+
+[![Live Demo](https://img.shields.io/badge/Demo-Live%20on%20Render-00c7b7?style=for-the-badge&logo=render&logoColor=white)](https://eco-ledger-j5i9.onrender.com)
+
 ## Security Notes
 
 - Passwords hashed with Werkzeug (`generate_password_hash`)
