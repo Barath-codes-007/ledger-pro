@@ -13,6 +13,7 @@ const STATIC_ASSETS = [
   "/static/css/style.css",
   "/static/js/main.js",
   "/static/js/charts.js",
+  "/static/js/voice-assistant.js",
   "/static/js/vendor/chart.umd.min.js",
   "/static/manifest.webmanifest",
   "/static/img/icon-192.png",

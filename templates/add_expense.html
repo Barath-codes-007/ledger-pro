@@ -4,8 +4,15 @@
 {% block page_subtitle %}Log a new transaction{% endblock %}
 
 {% block content %}
+<div class="voice-trigger-row">
+  <button type="button" class="voice-trigger-btn" data-voice-entry="expense" data-voice-form="expenseForm">
+    <span class="mic-dot">🎙️</span> Voice Entry
+  </button>
+  <span style="font-size:12px;color:var(--text-muted);">or fill in the form manually below</span>
+</div>
+
 <div class="panel form-card">
-  <form method="POST" action="{{ url_for('add_expense') }}" enctype="multipart/form-data">
+  <form id="expenseForm" method="POST" action="{{ url_for('add_expense') }}" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="field">
       <label>Category</label>
@@ -92,4 +99,8 @@ document.getElementById('receipt').addEventListener('change', function(e) {
   }
 });
 </script>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/voice-assistant.js') }}"></script>
 {% endblock %}

@@ -68,6 +68,23 @@ a command palette (Ctrl/Cmd+K) and keyboard shortcuts; an accessibility
 pass (skip link, live-region toasts, labeled search, existing
 focus-visible/reduced-motion rules confirmed).
 
+**Voice Entry** — a "🎙️ Voice Entry" button on both Add Expense and Add
+Income sits above the untouched manual form (never forced). Speech capture
+and synthesis use the browser's own Web Speech API — no external service,
+no API key. A conversational flow asks one field at a time, skips anything
+already said in a single sentence ("I spent 500 rupees on food for lunch
+today" fills category/amount/description/date in one turn), supports
+spoken numbers including Indian lakh/crore, offers a low-confidence
+"should I use X?" confirmation before accepting an unrecognized category as
+a new custom one, shows a review card with per-field Edit before saving,
+and falls back to a type-your-answer input if the mic is denied or
+recognition fails. Save does not write to the database itself — it fills
+the real existing form and submits it through the real existing route, so
+every manual-entry protection (CSRF, validation, duplicate detection,
+audit log, journal posting) applies identically. The understanding layer
+(`voice_parser.py`) is deterministic/rule-based, the same honest pattern
+as the Finance Copilot — not a call to an external AI model.
+
 ## Explicitly not implemented (by design)
 
 Per the project's own "no fake features" rule:
@@ -76,6 +93,12 @@ Per the project's own "no fake features" rule:
 - A general-purpose AI assistant (the Finance Copilot is rule-based by design)
 - Full offline financial sync (the service worker explicitly excludes
   financial pages and API routes from its cache)
+- Voice entry in any language other than English (architected so another
+  language's recognition code and keyword table could be added to
+  voice_parser.py later; nothing beyond English is implemented or claimed)
+- Voice command shortcuts mid-conversation ("cancel", "change amount" while
+  mid-flow) beyond what the field-driven flow and its Edit buttons, Retry,
+  and Start Again controls already cover
 
 ## Known partial areas (see QA_CHECKLIST.md for the full list)
 
@@ -112,6 +135,7 @@ ExpenseTracker/
 ├── repositories.py           # Thin repository layer (expenses/income/accounts)
 ├── imports.py                 # CSV/Excel import pipeline
 ├── copilot.py                 # Rule-based Finance Copilot
+├── voice_parser.py             # Rule-based speech-to-structured-data (Voice Entry)
 ├── migrations.py              # Numbered, idempotent schema migrations
 ├── backup.py                   # Pre-migration SQLite backups
 ├── database.py                  # Schema, connection, minor-unit backfill

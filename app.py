@@ -31,6 +31,7 @@ import repositories
 import imports
 import copilot
 import translations
+import voice_parser
 from money import to_minor, to_major, format_amount
 
 # ---------------------------------------------------------------------------
@@ -1284,6 +1285,42 @@ def api_search():
                     "amount": r["amount"], "date": r["date"]} for r in rows]
     conn.close()
     return jsonify(results)
+
+
+@app.route("/api/voice/extract", methods=["POST"])
+@login_required
+def api_voice_extract():
+    """
+    Voice-entry conversation turn. Pure transport: all the actual
+    understanding happens in voice_parser.py's update_draft()/next_step(),
+    which are plain functions with no DB/session access - this route's
+    only job is auth, reading the request, calling them, and returning
+    JSON. The AI never touches the database directly (see spec #19); the
+    client takes the returned draft and submits it through the normal
+    /expenses/add or /income/add form once the person confirms.
+    """
+    body = request.get_json(silent=True) or {}
+    context = body.get("context")
+    if context not in ("expense", "income"):
+        return jsonify({"error": "context must be 'expense' or 'income'"}), 422
+
+    utterance = (body.get("utterance") or "")[:500]  # cap input length defensively
+    asking_field = body.get("asking_field")
+    draft = body.get("draft") or {}
+    if not isinstance(draft, dict):
+        return jsonify({"error": "draft must be an object"}), 422
+
+    known_categories = list(CATEGORY_ICONS.keys())
+    updated = voice_parser.update_draft(draft, utterance, asking_field, context, known_categories)
+    question, field, low_confidence, ready = voice_parser.next_step(updated, context)
+
+    return jsonify({
+        "draft": updated,
+        "question": question,
+        "field": field,
+        "low_confidence": low_confidence,
+        "ready": ready,
+    })
 
 
 @app.route("/api/insights")

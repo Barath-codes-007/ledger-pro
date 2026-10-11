@@ -41,6 +41,25 @@ environment has — they are not claimed as done.
 - [x] Progress correct, contributions recorded, completion status — `tests/test_analytics.py`,
       `tests/test_calendar_close_snapshot_demo.py`
 
+## Voice Entry
+- [x] Normal manual expense/income entry unaffected — `test_voice_ui.py` (live HTTP POST
+      through both real routes, confirmed working before AND after the voice markup was added)
+- [x] Amount parsing: digits, ₹/rupees/rs, commas, decimals, number words incl. lakh/crore — `test_voice_parser.py`
+- [x] Category: exact match, keyword match, "say it all in one sentence" (no unnecessary questions) — `test_voice_parser.py`, `test_voice_api.py`
+- [x] Unknown/custom category requires confirmation before being accepted, never silently guessed — `test_voice_parser.py`, `test_voice_api.py`
+- [x] Missing information is asked for one field at a time, in the spec's own recommended order — `test_voice_parser.py`
+- [x] A direct answer is never overwritten by a later bonus guess from an unrelated sentence — `test_voice_parser.py`
+- [x] Context correction ("actually make that 600") — `test_voice_parser.py`
+- [x] Full expense AND income conversations run end-to-end through the actual API route, not just the pure functions — `test_voice_api.py`
+- [x] Cross-user isolation of the extraction endpoint — `test_voice_api.py`
+- [x] Save reuses the real add-expense/add-income form and route — no parallel save path exists to test separately
+- [ ] **Not verified**: actual browser microphone capture, live SpeechRecognition accuracy, and SpeechSynthesis audio.
+      pytest cannot drive a real browser microphone; this was verified by reading the Web Speech API's documented
+      behavior and by live-testing every surrounding piece (page rendering, asset loading, the real form submission
+      path), not by an actual spoken-voice test run.
+- [ ] **Not verified**: microphone-permission-denied and recognition-failure UI states in a real browser (the code
+      path exists and is reviewable in voice-assistant.js, but was not clicked through in an actual browser here).
+
 ## Analytics
 - [x] Chart-data/insights endpoints aggregate from the same `amount_minor` source as the dashboard — `test_money.py`
 - [ ] **Not verified**: pixel-level chart rendering in a real browser (Chart.js itself is unmodified upstream code)
