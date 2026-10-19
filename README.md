@@ -236,6 +236,47 @@ QA_CHECKLIST.md for exactly what is and isn't verified.
   tests asserting user A cannot read, edit, delete, refund, reverse, or
   reconcile user B's data
 
+  
+<p align="center">
+  <h1 align="center">LEDGER PRO</h1>
+  <p align="center">
+    Professional Personal Finance & Financial Intelligence
+  </p>
+  <p align="center">
+    <a href="https://eco-ledger-j5i9.onrender.com/">
+      <img src="https://img.shields.io/badge/Live_Demo-Launch_Ledger_Pro-16A34A?style=for-the-badge&logo=render&logoColor=white" alt="Launch Ledger Pro">
+    </a>
+  </p>
+</p>
+
+## 🚀 Live Application
+
+**Try Ledger-Pro:**  
+https://eco-ledger-j5i9.onrender.com/
+
+Explore the deployed application and its available features.
+
+## 🛠️ Technology Stack
+
+- Python
+- Flask
+- SQLite
+- Pandas
+- OpenPyXL
+- ReportLab
+
+## 👨‍💻 Developer
+
+**Barath**  
+Python Developer | Web Developer
+
+---
+
+<p align="center">
+  Built with dedication by Barath.
+</p>
+
+
 ## License
 
 MIT License — free to use, modify and distribute.
