@@ -71,19 +71,35 @@ focus-visible/reduced-motion rules confirmed).
 **Voice Entry** — a "🎙️ Voice Entry" button on both Add Expense and Add
 Income sits above the untouched manual form (never forced). Speech capture
 and synthesis use the browser's own Web Speech API — no external service,
-no API key. A conversational flow asks one field at a time, skips anything
-already said in a single sentence ("I spent 500 rupees on food for lunch
-today" fills category/amount/description/date in one turn), supports
-spoken numbers including Indian lakh/crore, offers a low-confidence
-"should I use X?" confirmation before accepting an unrecognized category as
-a new custom one, shows a review card with per-field Edit before saving,
-and falls back to a type-your-answer input if the mic is denied or
-recognition fails. Save does not write to the database itself — it fills
-the real existing form and submits it through the real existing route, so
-every manual-entry protection (CSRF, validation, duplicate detection,
-audit log, journal posting) applies identically. The understanding layer
-(`voice_parser.py`) is deterministic/rule-based, the same honest pattern
-as the Finance Copilot — not a call to an external AI model.
+no API key. A conversational flow asks one field at a time and skips anything
+already said ("I spent 500 rupees on food for lunch at Swiggy by UPI today"
+fills category, amount, description, merchant, payment type, currency and
+date in one go). For expenses it covers every field the manual form has:
+category, amount, description, date, payment type, merchant (optional —
+say "skip"), currency (skipped if you said "rupees"/"dollars"), and a
+receipt. Saying "no" to "use today's date?" asks for the actual date and
+states the accepted formats ("yesterday", "5th October", "two days ago",
+"05-10-2026" day-month-year). If an answer can't be understood it says what
+went wrong and what to say instead, rather than repeating itself. Answering
+"yes" to the receipt question opens Take photo / Upload file / Skip. An
+unrecognized category is confirmed before being accepted as a new custom one,
+the review card has a server-worded Edit button per field, and a type-your-
+answer fallback covers a denied mic or failed recognition. The mic only
+opens after the assistant finishes speaking (so it never transcribes its own
+voice), and a "Voice on/off" toggle mutes the spoken questions. Save does not
+write to the database itself — it fills the real existing form (receipt
+included) and submits it through the real existing route, so every manual-
+entry protection (CSRF, validation, magic-byte receipt checks, duplicate
+detection, audit log, journal posting) applies identically. The understanding
+layer (`voice_parser.py`) is deterministic/rule-based, the same honest
+pattern as the Finance Copilot — not a call to an external AI model.
+
+**Receipt photos** — Add Expense has a "Take photo" button beside the upload
+box: a live camera preview captures a JPEG (downscaled to stay under the
+5 MB limit) into the form's real receipt field, with a preview and Remove
+button. Needs HTTPS or localhost for the camera; if it's blocked or missing
+it falls back to the device's camera app / file picker. Income has no
+receipts, so voice income entry doesn't ask for one.
 
 ## Explicitly not implemented (by design)
 
@@ -99,6 +115,7 @@ Per the project's own "no fake features" rule:
 - Voice command shortcuts mid-conversation ("cancel", "change amount" while
   mid-flow) beyond what the field-driven flow and its Edit buttons, Retry,
   and Start Again controls already cover
+- Receipt OCR (a photo is stored as the receipt; nothing is read from it)
 
 ## Known partial areas (see QA_CHECKLIST.md for the full list)
 
@@ -173,8 +190,13 @@ docker compose up --build
 
 ```bash
 pip install -r requirements-dev.txt
+npm install --prefix tests/js     # optional: enables the front-end voice-flow tests (jsdom)
 pytest -q
 ```
+
+The front-end tests load the real pages from a live local server and drive the
+real `voice-assistant.js` / `receipt-camera.js` with a scripted fake microphone;
+they are skipped automatically if Node/jsdom aren't installed.
 
 ## Environment Variables
 
@@ -202,16 +224,6 @@ pytest -q
 
 This was never actually deployed to Render from this environment — see
 QA_CHECKLIST.md for exactly what is and isn't verified.
-
-# LEDGER
-
-> **Professional Personal Finance & Financial Intelligence Platform**  
-> *Developed by Barath*
-
-🔗 **Live Demo:** [https://eco-ledger-j5i9.onrender.com](https://eco-ledger-j5i9.onrender.com)  
-💻 **Repository:** [https://github.com/Barath-codes-007/ledger-pro](https://github.com/Barath-codes-007/ledger-pro)
-
-[![Live Demo](https://img.shields.io/badge/Demo-Live%20on%20Render-00c7b7?style=for-the-badge&logo=render&logoColor=white)](https://eco-ledger-j5i9.onrender.com)
 
 ## Security Notes
 

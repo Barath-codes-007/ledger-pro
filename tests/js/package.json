@@ -1,0 +1,6 @@
+{
+  "name": "ledger-frontend-tests",
+  "private": true,
+  "description": "Drives the real voice-entry JavaScript in a simulated browser (jsdom) against a live Ledger server.",
+  "devDependencies": { "jsdom": "^24.1.0" }
+}

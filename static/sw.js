@@ -8,12 +8,13 @@
  * page can't be reached, it falls back to a plain "you're offline" page
  * rather than claiming to work without a connection.
  */
-const CACHE_NAME = "ledger-static-v1";
+const CACHE_NAME = "ledger-static-v2";
 const STATIC_ASSETS = [
   "/static/css/style.css",
   "/static/js/main.js",
   "/static/js/charts.js",
   "/static/js/voice-assistant.js",
+  "/static/js/receipt-camera.js",
   "/static/js/vendor/chart.umd.min.js",
   "/static/manifest.webmanifest",
   "/static/img/icon-192.png",
@@ -57,14 +58,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Network-first for static assets: always try for the latest copy so an
+  // updated script or stylesheet reaches people straight away, and only fall
+  // back to the cache when offline. (The earlier cache-first strategy kept
+  // serving old JS/CSS after updates until the cache was cleared by hand.)
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((resp) => {
-        const copy = resp.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+    fetch(event.request)
+      .then((resp) => {
+        if (resp && resp.ok) {
+          const copy = resp.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
         return resp;
-      });
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });

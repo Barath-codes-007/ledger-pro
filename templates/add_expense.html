@@ -81,6 +81,13 @@
         Click to upload a receipt image or PDF (max 5MB)
       </label>
       <input type="file" id="receipt" name="receipt" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf" style="display:none;">
+      <div class="receipt-actions">
+        <button type="button" class="voice-ctrl-btn" data-receipt-camera="receipt">
+          <i class="fa-solid fa-camera"></i> Take photo
+        </button>
+        <span class="receipt-or">or upload a file above</span>
+      </div>
+      <div class="receipt-preview" data-receipt-preview="receipt"></div>
     </div>
 
     <div style="display:flex; gap:12px; margin-top:22px;">
@@ -92,15 +99,21 @@
 
 <script>
 document.getElementById('date').valueAsDate = new Date();
-document.getElementById('receipt').addEventListener('change', function(e) {
+(function () {
   const label = document.querySelector('.upload-drop');
-  if (e.target.files.length) {
-    label.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + e.target.files[0].name;
-  }
-});
+  const originalLabel = label.innerHTML;
+  document.getElementById('receipt').addEventListener('change', function(e) {
+    if (e.target.files.length) {
+      label.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + e.target.files[0].name;
+    } else {
+      label.innerHTML = originalLabel;   // receipt removed - restore the upload prompt
+    }
+  });
+})();
 </script>
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/receipt-camera.js') }}"></script>
 <script src="{{ url_for('static', filename='js/voice-assistant.js') }}"></script>
 {% endblock %}

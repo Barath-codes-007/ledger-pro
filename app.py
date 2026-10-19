@@ -1310,14 +1310,44 @@ def api_voice_extract():
     if not isinstance(draft, dict):
         return jsonify({"error": "draft must be an object"}), 422
 
+    conn = get_db_connection()
+    user_row = conn.execute("SELECT currency FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    conn.close()
+    user_currency = user_row["currency"] if user_row and user_row["currency"] in CURRENCIES else DEFAULT_CURRENCY
+
+    # Edit buttons on the review card re-ask one specific field. The question
+    # text comes from the server so wording lives in exactly one place.
+    reask = body.get("reask")
+    if reask:
+        if reask not in voice_parser.EXPENSE_FIELDS + voice_parser.INCOME_FIELDS:
+            return jsonify({"error": "unknown field"}), 422
+        working = dict(draft)
+        if reask == "date":
+            working["date_declined_today"] = True  # ask for the actual date, not "use today?"
+        if reask == "receipt":
+            working.pop("receipt", None)
+        return jsonify({
+            "draft": working,
+            "question": voice_parser.question_for(reask, context, working, user_currency),
+            "field": reask,
+            "hint": voice_parser.hint_for(reask),
+            "low_confidence": False,
+            "ready": False,
+        })
+
     known_categories = list(CATEGORY_ICONS.keys())
-    updated = voice_parser.update_draft(draft, utterance, asking_field, context, known_categories)
-    question, field, low_confidence, ready = voice_parser.next_step(updated, context)
+    updated = voice_parser.update_draft(
+        draft, utterance, asking_field, context, known_categories,
+        user_currency=user_currency, payment_modes=PAYMENT_MODES, currencies=list(CURRENCIES.keys()),
+    )
+    question, field, low_confidence, ready = voice_parser.next_step(updated, context, user_currency)
 
     return jsonify({
         "draft": updated,
         "question": question,
         "field": field,
+        "hint": voice_parser.hint_for(field) if field else None,
+        "user_currency": user_currency,
         "low_confidence": low_confidence,
         "ready": ready,
     })

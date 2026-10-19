@@ -20,5 +20,10 @@ jobs:
           pip install flake8
       - name: Lint (non-blocking style check)
         run: flake8 --max-line-length=120 --extend-ignore=E203,W503 app.py database.py services.py security.py money.py || true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install front-end test dependencies (jsdom)
+        run: npm install --prefix tests/js
       - name: Run tests
         run: pytest -q

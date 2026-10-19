@@ -188,41 +188,52 @@ def _run_turns(turns, context="expense", categories=CATEGORIES):
 
 
 def test_expense_full_step_by_step_conversation_matches_spec_example():
-    turns = [
-        (None, "start"),  # opening prompt, nothing said yet handled by first next_step call separately
-    ]
     draft = {}
     draft = vp.update_draft(draft, "Food", "category", "expense", CATEGORIES, today=TODAY)
-    q, field, low, ready = vp.next_step(draft, "expense")
-    assert field == "amount"
+    assert vp.next_step(draft, "expense")[1] == "amount"
 
     draft = vp.update_draft(draft, "350 rupees", "amount", "expense", CATEGORIES, today=TODAY)
-    q, field, low, ready = vp.next_step(draft, "expense")
-    assert field == "description"
+    assert vp.next_step(draft, "expense")[1] == "description"
 
     draft = vp.update_draft(draft, "Lunch", "description", "expense", CATEGORIES, today=TODAY)
-    q, field, low, ready = vp.next_step(draft, "expense")
-    assert field == "date"
+    assert vp.next_step(draft, "expense")[1] == "date"
 
     draft = vp.update_draft(draft, "Yes", "date", "expense", CATEGORIES, today=TODAY)
-    q, field, low, ready = vp.next_step(draft, "expense")
-    assert ready is True
+    assert vp.next_step(draft, "expense")[1] == "payment_mode"   # now asked too
 
-    assert draft["category"] == "Food"
-    assert draft["amount"] == 350.0
-    assert draft["description"] == "Lunch"
-    assert draft["date"] == "2026-10-05"
+    draft = vp.update_draft(draft, "UPI", "payment_mode", "expense", CATEGORIES, today=TODAY)
+    assert vp.next_step(draft, "expense")[1] == "merchant"
+
+    draft = vp.update_draft(draft, "skip", "merchant", "expense", CATEGORIES, today=TODAY)
+    # "350 rupees" already told us the currency, so that question is skipped
+    assert draft["currency"] == "INR" and vp.next_step(draft, "expense")[1] == "receipt"
+
+    draft = vp.update_draft(draft, "no", "receipt", "expense", CATEGORIES, today=TODAY)
+    assert vp.next_step(draft, "expense")[3] is True
+
+    assert draft["category"] == "Food" and draft["amount"] == 350.0
+    assert draft["description"] == "Lunch" and draft["date"] == "2026-10-05"
+    assert draft["payment_mode"] == "UPI"
 
 
-def test_expense_single_sentence_skips_all_questions():
+def test_expense_single_sentence_only_asks_what_is_still_missing():
     draft = vp.update_draft({}, "I spent 500 rupees on food for lunch today",
                              None, "expense", CATEGORIES, today=TODAY)
+    assert draft["amount"] == 500.0 and draft["category"] == "Food"
+    assert draft["date"] == "2026-10-05" and "lunch" in draft["description"].lower()
+    # category/amount/description/date/currency are known - next is the
+    # payment type, NOT a repeat of anything already said.
     q, field, low, ready = vp.next_step(draft, "expense")
-    assert ready is True, f"expected ready, got next field={field}"
-    assert draft["amount"] == 500.0
-    assert draft["category"] == "Food"
-    assert draft["date"] == "2026-10-05"
-    assert "lunch" in draft["description"].lower()
+    assert field == "payment_mode" and ready is False
+
+
+def test_expense_everything_in_one_sentence_reaches_receipt_question():
+    draft = vp.update_draft(
+        {}, "I spent 500 rupees on food for lunch at Swiggy by UPI today",
+        None, "expense", CATEGORIES, today=TODAY)
+    assert draft["payment_mode"] == "UPI" and draft["merchant"] == "Swiggy"
+    assert draft["description"] == "Lunch"
+    assert vp.next_step(draft, "expense")[1] == "receipt"
 
 
 def test_expense_custom_category_requires_confirmation_then_accepts_yes():
@@ -288,3 +299,153 @@ def test_missing_amount_is_asked_for_specifically():
     q, field, low, ready = vp.next_step(draft, "expense")
     assert field == "amount"
     assert "spend" in q.lower()
+
+
+# ---------------------------------------------------------------------------
+# The reported bugs: "no" to today's date, date formats, and the missing
+# manual-form fields (payment type, merchant, currency, receipt)
+# ---------------------------------------------------------------------------
+def test_saying_no_to_todays_date_asks_for_the_actual_date_instead_of_repeating():
+    draft = {"category": "Food", "amount": 100.0, "description": "Lunch"}
+    q1, field1, _, _ = vp.next_step(draft, "expense")
+    assert field1 == "date" and "today" in q1.lower()
+    draft = vp.update_draft(draft, "no", "date", "expense", CATEGORIES, today=TODAY)
+    q2, field2, _, _ = vp.next_step(draft, "expense")
+    assert field2 == "date" and q2 != q1 and "what date" in q2.lower()
+
+
+def test_date_question_states_the_expected_format():
+    declined = {"category": "Food", "amount": 1.0, "description": "x", "date_declined_today": True}
+    q, field, _, _ = vp.next_step(declined, "expense")
+    assert "day-month-year" in q and ("05-10-2026" in q or "5th October" in q)
+    assert "yesterday" in vp.hint_for("date")
+
+
+def test_after_no_a_real_date_is_accepted():
+    draft = {"category": "Food", "amount": 100.0, "description": "Lunch"}
+    draft = vp.update_draft(draft, "no", "date", "expense", CATEGORIES, today=TODAY)
+    draft = vp.update_draft(draft, "5th October", "date", "expense", CATEGORIES, today=TODAY)
+    assert draft["date"] == "2026-10-05" and "date_declined_today" not in draft
+
+
+def test_no_comma_yesterday_keeps_the_date_it_contained():
+    draft = vp.update_draft({}, "no, yesterday", "date", "expense", CATEGORIES, today=TODAY)
+    assert draft["date"] == "2026-10-04"
+
+
+def test_unparseable_date_explains_the_format_not_just_repeats():
+    draft = vp.update_draft({"category": "Food", "amount": 1.0, "description": "x"},
+                             "whenever", "date", "expense", CATEGORIES, today=TODAY)
+    q, field, _, _ = vp.next_step(draft, "expense")
+    assert field == "date" and "couldn't understand that date" in q.lower() and "day-month-year" in q
+
+
+def test_unparseable_amount_gives_the_spec_error_message():
+    draft = vp.update_draft({"category": "Food"}, "a lot", "amount", "expense", CATEGORIES, today=TODAY)
+    q, field, _, _ = vp.next_step(draft, "expense")
+    assert field == "amount" and "couldn't understand the amount" in q.lower() and "500 rupees" in q
+
+
+def test_date_numeric_day_first_and_days_ago():
+    assert vp.parse_date_phrase("05-10-2026", today=TODAY) == "2026-10-05"
+    assert vp.parse_date_phrase("5/10/2026", today=TODAY) == "2026-10-05"
+    assert vp.parse_date_phrase("two days ago", today=TODAY) == "2026-10-03"
+    assert vp.parse_date_phrase("a week ago", today=TODAY) == "2026-09-28"
+    assert vp.parse_date_phrase("32-13-2026", today=TODAY) is None  # impossible date, no guess
+
+
+def test_date_digits_are_never_mistaken_for_the_amount():
+    assert vp.parse_amount("spent on 05-10-2026", strict=True) is None
+    r = vp.extract_all("spent 250 on transport on 05-10-2026", CATEGORIES, today=TODAY)
+    assert r["amount"] == 250.0 and r["date"] == "2026-10-05"
+
+
+def test_casual_number_words_are_not_read_as_an_amount_in_a_sentence():
+    assert vp.extract_all("bought two coffees", CATEGORIES)["amount"] is None   # a quantity, not an amount
+    assert vp.parse_amount("two") == 2.0                                        # but fine as a direct answer
+
+
+def test_payment_mode_parsing_maps_to_real_app_modes():
+    modes = ["Cash", "Credit Card", "Debit Card", "UPI", "Net Banking", "Wallet"]
+    assert vp.parse_payment_mode("paid by UPI", modes) == "UPI"
+    assert vp.parse_payment_mode("google pay", modes) == "UPI"
+    assert vp.parse_payment_mode("with my credit card", modes) == "Credit Card"
+    assert vp.parse_payment_mode("debit card", modes) == "Debit Card"
+    assert vp.parse_payment_mode("in cash", modes) == "Cash"
+    assert vp.parse_payment_mode("net banking", modes) == "Net Banking"
+    assert vp.parse_payment_mode("something else", modes) is None
+
+
+def test_payment_mode_question_is_asked_and_unrecognized_answer_explains_options():
+    draft = {"category": "Food", "amount": 100.0, "description": "x", "date": "2026-10-05"}
+    q, field, _, _ = vp.next_step(draft, "expense")
+    assert field == "payment_mode" and "type of payment" in q.lower()
+    draft = vp.update_draft(draft, "banana", "payment_mode", "expense", CATEGORIES, today=TODAY)
+    q, field, _, _ = vp.next_step(draft, "expense")
+    assert field == "payment_mode" and "cash, UPI, credit card" in q
+
+
+def test_merchant_parsing_and_skip():
+    assert vp.parse_merchant("lunch at Swiggy today") == "Swiggy"
+    assert vp.parse_merchant("bought it from Big Bazaar by upi") == "Big Bazaar"
+    assert vp.parse_merchant("no merchant words here") is None
+    draft = vp.update_draft({}, "skip", "merchant", "expense", CATEGORIES, today=TODAY)
+    assert "merchant" in draft["skipped"]
+    full = {"category": "Food", "amount": 1.0, "description": "x", "date": "2026-10-05",
+            "payment_mode": "UPI", "currency": "INR", "skipped": ["merchant"], "receipt": "no"}
+    assert vp.next_step(full, "expense")[3] is True       # skipped optional field isn't asked again
+
+
+def test_currency_parsing_and_default_confirmation():
+    codes = ["USD", "EUR", "GBP", "INR", "JPY", "AUD", "CAD"]
+    assert vp.parse_currency("20 dollars", codes) == "USD"
+    assert vp.parse_currency("fifty euros", codes) == "EUR"
+    assert vp.parse_currency("500 rupees", codes) == "INR"
+    assert vp.parse_currency("australian dollars", codes) == "AUD"
+    assert vp.parse_currency("nothing here", codes) is None
+    base = {"category": "Food", "amount": 20.0, "description": "x", "date": "2026-10-05",
+            "payment_mode": "Cash", "skipped": ["merchant"]}
+    q, field, _, _ = vp.next_step(base, "expense", user_currency="INR")
+    assert field == "currency" and "INR" in q
+    d = vp.update_draft(base, "yes", "currency", "expense", CATEGORIES, today=TODAY, user_currency="INR")
+    assert d["currency"] == "INR"
+    d = vp.update_draft(base, "dollars", "currency", "expense", CATEGORIES, today=TODAY, user_currency="INR")
+    assert d["currency"] == "USD"
+
+
+def test_receipt_yes_leads_to_capture_step_then_attached():
+    base = {"category": "Food", "amount": 1.0, "description": "x", "date": "2026-10-05",
+            "payment_mode": "Cash", "currency": "INR", "skipped": ["merchant"]}
+    q, field, _, _ = vp.next_step(base, "expense")
+    assert field == "receipt" and "receipt" in q.lower()
+    d = vp.update_draft(base, "yes", "receipt", "expense", CATEGORIES, today=TODAY)
+    q, field, _, ready = vp.next_step(d, "expense")
+    assert field == "receipt_capture" and ready is False and "photo" in q.lower() and "upload" in q.lower()
+    d = vp.update_draft(d, "attached", "receipt_capture", "expense", CATEGORIES, today=TODAY)
+    assert d["receipt"] == "attached" and vp.next_step(d, "expense")[3] is True
+
+
+def test_receipt_capture_can_be_skipped_and_still_finishes():
+    base = {"category": "Food", "amount": 1.0, "description": "x", "date": "2026-10-05",
+            "payment_mode": "Cash", "currency": "INR", "skipped": ["merchant"], "receipt": "pending"}
+    d = vp.update_draft(base, "skip", "receipt_capture", "expense", CATEGORIES, today=TODAY)
+    assert d["receipt"] == "skipped" and vp.next_step(d, "expense")[3] is True
+
+
+def test_receipt_unclear_answer_asks_again_with_guidance():
+    base = {"category": "Food", "amount": 1.0, "description": "x", "date": "2026-10-05",
+            "payment_mode": "Cash", "currency": "INR", "skipped": ["merchant"]}
+    d = vp.update_draft(base, "hmm maybe", "receipt", "expense", CATEGORIES, today=TODAY)
+    q, field, _, _ = vp.next_step(d, "expense")
+    assert field == "receipt" and "yes" in q.lower() and "no" in q.lower()
+
+
+def test_income_flow_is_unchanged_by_the_expense_only_fields():
+    draft = {"source": "Freelance", "amount": 15000.0, "description": "Site", "date": "2026-10-04"}
+    assert vp.next_step(draft, "income")[3] is True
+
+
+def test_question_for_is_the_single_source_of_truth_for_edit_buttons():
+    assert "payment" in vp.question_for("payment_mode", "expense").lower()
+    assert "receipt" in vp.question_for("receipt", "expense").lower()
+    assert "what date" in vp.question_for("date", "expense", {"date_declined_today": True}).lower()

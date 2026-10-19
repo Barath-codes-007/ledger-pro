@@ -53,12 +53,15 @@ environment has — they are not claimed as done.
 - [x] Full expense AND income conversations run end-to-end through the actual API route, not just the pure functions — `test_voice_api.py`
 - [x] Cross-user isolation of the extraction endpoint — `test_voice_api.py`
 - [x] Save reuses the real add-expense/add-income form and route — no parallel save path exists to test separately
-- [ ] **Not verified**: actual browser microphone capture, live SpeechRecognition accuracy, and SpeechSynthesis audio.
-      pytest cannot drive a real browser microphone; this was verified by reading the Web Speech API's documented
-      behavior and by live-testing every surrounding piece (page rendering, asset loading, the real form submission
-      path), not by an actual spoken-voice test run.
-- [ ] **Not verified**: microphone-permission-denied and recognition-failure UI states in a real browser (the code
-      path exists and is reviewable in voice-assistant.js, but was not clicked through in an actual browser here).
+- [x] Voice entry asks every manual-form field (payment type, merchant, currency, receipt); "no" to
+      today's date asks for the date and states the formats; unclear answers explain what to say — `test_voice_parser.py`, `test_voice_api.py`
+- [x] The real voice-assistant.js / receipt-camera.js run end to end in a simulated browser (jsdom) against a live server with a
+      scripted fake microphone: full expense conversation, one-sentence entry, custom category, error + Type-instead path, cancel,
+      income flow, receipt photo via the camera dialog's fallback, per-field Edit, Save filling and submitting the real form — `tests/js/voice_flow.js`
+- [x] A camera-style JPEG is stored with a random name, served only to its owner, and a fake image is rejected — `test_voice_ui.py`
+- [ ] **Not verified**: real microphone accuracy, real SpeechSynthesis audio, and a real camera. The fake microphone/camera used in
+      the jsdom tests exercise the app's logic, not those hardware/browser features - try them in Chrome before a demo.
+- [ ] **Not verified**: visual appearance of the voice dialog and camera dialog (layout/animation) - no screenshot testing exists.
 
 ## Analytics
 - [x] Chart-data/insights endpoints aggregate from the same `amount_minor` source as the dashboard — `test_money.py`
